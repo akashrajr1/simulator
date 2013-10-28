@@ -1,7 +1,9 @@
 #ifndef _UC32SIM_ELF_H
 #define _UC32SIM_ELF_H
 
+#include "mmu.h"
 #include <stdint.h>
+
 
 #define ELF_MAGIC 0x464C457FU	/* "\x7FELF" in little endian */
 
@@ -84,6 +86,7 @@ typedef struct {
 #define ELF_SHN_UNDEF		0
 
 
-int read_elf(const char* filename);
+FILE *elf_check(const char* filename, Elf **elf_store);
+void elf_load(FILE *elf, Elf *elfhdr, mmu_t *mmu);
 
 #endif /* !_UC32SIM_ELF_H */

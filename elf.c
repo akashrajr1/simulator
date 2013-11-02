@@ -71,7 +71,7 @@ void elf_load(FILE *elf, Elf *elfhdr, mmu_t *mmu){
 			continue;
 		uint32_t va = ph.p_va -  ph.p_va % PGSIZE;
 		for (; va < ph.p_memsz + ph.p_va; va += PGSIZE){
-			void *pa = mmu_allocate_page(mmu, va);
+			void *pa = mmu_get_page(mmu, va, 1, NULL);
 			// void *pa_start = va < ph.p_va? pa + ph.p_va - va: pa;
 			memset(pa, 0, PGSIZE);
 			// printf("----in virutal page %x, start from %lx, cleared %lx bytes\n", va, va + pa_start - pa, PGSIZE - (pa_start - pa));

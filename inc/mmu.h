@@ -22,12 +22,6 @@
  */
 #include <stdint.h>
 
-typedef enum{
-	MM_BYTE = 1,
-	MM_HALFWORD = 2,
-	MM_WORD = 4
-} mem_size;
-
 #define PTXSHIFT	12
 #define PDXSHIFT	22
 
@@ -50,6 +44,29 @@ typedef enum{
 #define NITLB	8
 #define NDTLB	8
 
+#define ITLB_HIT_CYCLE		1
+#define	DTLB_HIT_CYCLE		1
+#define MEM_READ_CYCLE		30
+#define MEM_WRITE_CYCLE		15
+#define PAGING_CYCLE		(2 * MEM_READ_CYCLE + 4)
+
+typedef struct{
+	uint32_t itlb_hit;
+	uint32_t dtlb_hit;
+	uint32_t mem_read;
+	uint32_t mem_write;
+	uint32_t paging;
+} mmu_latency;
+
+typedef struct{
+	uint32_t npages;
+	uint32_t npgtbls;
+	uint32_t nitlb_miss;
+	uint32_t nitlb_hit;
+	uint32_t ndtlb_miss;
+	uint32_t ndtlb_hit;
+} mmu_stats;
+
 typedef void* pte_t;
 typedef pte_t* pde_t;
 
@@ -66,7 +83,6 @@ struct pgtbl{
 };
 typedef struct pgtbl pgtbl_t;
 
-
 typedef struct{
 	pde_t pd_entries[NPDENTRIES];
 	tlb_t itlb[NITLB];
@@ -75,14 +91,34 @@ typedef struct{
 	uint32_t d_evic_cntr;
 	pgtbl_t *ptlist;
 	pgtbl_t *listend;
+	mmu_stats stats;
+	mmu_latency latency;
 } mmu_t;
 
-/* functions for the simulator */
-mmu_t *mmu_init();
-void mmu_destroy(mmu_t *mmu);
-void *mmu_allocate_page(mmu_t *mmu, uintptr_t va);
+typedef enum {
+	MEM_INST = 0,
+	MEM_DATA
+} mem_type;
 
-/* functions for simulated programs */
-void mm_store(uintptr_t va, uint32_t value, mem_size mmsz);
-void mm_load(uintptr_t va, uint32_t* value_store, mem_size mmsz);
+
+/* functions for the simulator */
+mmu_t *mmu_init(mmu_latency *latency_ptr);
+void mmu_destroy(mmu_t *mmu);
+
+/*  
+ * the cache should first try mmu_get_tlb, if failed, call mmu_get_page
+ * latency cycle count written in *latency_store
+ *
+ * the simulator also use mmu_get_page to allocate pages.
+ */
+void *mmu_get_tlb(mmu_t *mmu, uintptr_t va, mem_type mtype, uint32_t *latency_store);
+void *mmu_get_page(mmu_t *mmu, uintptr_t va, int alloc, uint32_t *latency_store);
+/* 
+ * functions for the cache module 
+ * MMU operates on 32-bytes (8-words) cache lines.
+ * va should be aligned on 32-byte boundaries.
+ * data points memory in host.
+ */
+void mm_store(mmu_t *mmu, uintptr_t va, const uint32_t *data, uint32_t *latency_store);
+void mm_load(mmu_t *mmu, uintptr_t va, uint32_t *data, uint32_t *latency_store);
 #endif /* !_UC32SIM_MMU_H */

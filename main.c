@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
 	FILE *elf = elf_check(argv[1], &elfhdr);
 	if (!elf)
 		return 0;
-	mmu_t *mmu = mmu_init();
+	mmu_t *mmu = mmu_init(NULL);
 	elf_load(elf, elfhdr, mmu);
 
 	mmu_destroy(mmu);

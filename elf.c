@@ -5,13 +5,7 @@
 #include "inc/mmu.h"
 #include "inc/elf.h"
 #include "inc/instruction.h"
-
-static inline uint32_t min(uint32_t a, uint32_t b){
-	return a < b? a: b;
-}
-static inline uint32_t max(uint32_t a, uint32_t b){
-	return a > b? a: b;
-}
+#include "inc/misc.h"
 
 FILE *elf_check(const char* filename, Elf **elf_store){
 	static Elf elfhdr;
@@ -71,17 +65,19 @@ void elf_load(FILE *elf, Elf *elfhdr, mmu_t *mmu){
 			continue;
 		uint32_t va = ph.p_va -  ph.p_va % PGSIZE;
 		for (; va < ph.p_memsz + ph.p_va; va += PGSIZE){
-			void *pa = mmu_get_page(mmu, va, 1, NULL);
+			void *pa = mmu_get_page(mmu, va, 1);
 			// void *pa_start = va < ph.p_va? pa + ph.p_va - va: pa;
 			memset(pa, 0, PGSIZE);
 			// printf("----in virutal page %x, start from %lx, cleared %lx bytes\n", va, va + pa_start - pa, PGSIZE - (pa_start - pa));
 			if (va < ph.p_filesz + ph.p_va){
 				int read_start = max(ph.p_offset + va - ph.p_va, ph.p_offset);
 				int short_of = (va < ph.p_va)?(ph.p_va - va):0;
-				int read_size = min(PGSIZE - short_of, ph.p_filesz - (va - (ph.p_va - ph.p_va % PGSIZE)));
+				int read_size = min(PGSIZE - short_of,
+					ph.p_filesz - (va - (ph.p_va - ph.p_va % PGSIZE)));
 				fseek(elf, read_start, SEEK_SET);
 				fread(pa + short_of, 1, read_size, elf);
-				printf("----in virtual page %x, read file from %x, #%x bytes\n", va, read_start, read_size);
+				printf("----in virtual page %x, read file from %x, #%x bytes\n",
+					va, read_start, read_size);
 			}
 		}
 		// printf("loaded %d bytes to va %08x (%d bytes in memory)\n", ph.p_filesz, ph.p_va, ph.p_memsz);

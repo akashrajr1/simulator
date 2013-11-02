@@ -24,6 +24,11 @@ typedef enum {
 	SYS_lseek = 0x900013
 } syscall_num;
 
+/*
+ * Due to Cache/MMU designs, we have to pretend that syscall
+ * does not access Cache or MMU at all.
+ * syscall will use mmu_get_page, and directly operates on host memory.
+ */
 void syscall(syscall_num num, cpu_t *cpu);
 
 #endif

@@ -16,7 +16,7 @@
  * TLB: Instruction-TLB / Data-TLB
  *		8-entries each, full-set-associative
  *			20-bits virtual page no. -> 20-bits physical page no.
- *			eviction: Round-Robin/LRU
+ *			eviction: Round-Robin/Random
  *
  * Use virtual page on host as physcal page for the program being simulated.
  */
@@ -83,16 +83,22 @@ struct pgtbl{
 };
 typedef struct pgtbl pgtbl_t;
 
+typedef enum {
+	TLB_EVICT_SEQ = 0,
+	TLB_EVICT_RAND
+} tlb_evict;
+
 typedef struct{
-	pde_t pd_entries[NPDENTRIES];
-	tlb_t itlb[NITLB];
-	uint32_t i_evic_cntr;
-	tlb_t dtlb[NDTLB];
-	uint32_t d_evic_cntr;
-	pgtbl_t *ptlist;
-	pgtbl_t *listend;
-	mmu_stats stats;
+	pde_t		pd_entries[NPDENTRIES];
+	tlb_t 		itlb[NITLB];
+	tlb_t 		dtlb[NDTLB];
+	uint32_t 	i_evic_cntr;
+	uint32_t 	d_evic_cntr;
+	pgtbl_t *	ptlist;
+	pgtbl_t *	listend;
+	mmu_stats 	stats;
 	mmu_latency latency;
+	tlb_evict 	eviction;
 } mmu_t;
 
 typedef enum {
@@ -102,23 +108,23 @@ typedef enum {
 
 
 /* functions for the simulator */
-mmu_t *mmu_init(mmu_latency *latency_ptr);
+mmu_t *mmu_init(mmu_latency *latency_ptr, tlb_evict eviction);
 void mmu_destroy(mmu_t *mmu);
 
 /*  
- * the cache should first try mmu_get_tlb, if failed, call mmu_get_page
+ * the cache should use mmu_paging
  * latency cycle count written in *latency_store
  *
  * the simulator also use mmu_get_page to allocate pages.
  */
-void *mmu_get_tlb(mmu_t *mmu, uintptr_t va, mem_type mtype, uint32_t *latency_store);
-void *mmu_get_page(mmu_t *mmu, uintptr_t va, int alloc, uint32_t *latency_store);
+void *mmu_paging(mmu_t *mmu, uintptr_t va, mem_type type, uint32_t *latency_store);
+void *mmu_get_page(mmu_t *mmu, uintptr_t va, int alloc);
 /* 
  * functions for the cache module 
  * MMU operates on 32-bytes (8-words) cache lines.
- * va should be aligned on 32-byte boundaries.
- * data points memory in host.
+ * data and pa point to memory in host.
+ * returns latency cycle count.
  */
-void mm_store(mmu_t *mmu, uintptr_t va, const uint32_t *data, uint32_t *latency_store);
-void mm_load(mmu_t *mmu, uintptr_t va, uint32_t *data, uint32_t *latency_store);
+uint32_t mm_store(mmu_t *mmu, void *pa, const void *data);
+uint32_t mm_load(mmu_t *mmu, void *pa, void *data);
 #endif /* !_UC32SIM_MMU_H */

@@ -9,6 +9,9 @@
 #define PC_NUM		31
 #define	SP_NUM		29
 
+#define USER_STACK_TOP	0x10000000
+#define USER_STACK_SIZE	2*PGSIZE
+
 /*
  * TODO: need a pipelined design.
  */

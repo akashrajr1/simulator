@@ -8,7 +8,7 @@ typedef enum{
 } simulator_error;
 
 const static char *error_names[] = {
-	[ADDR_INVAL] = "Invalid address",
+	[ADDR_INVAL] = "Invalid address (page fault)",
 	[INST_INVAL] = "Invalid instruction",
 	[NO_SYSCALL] = "System call error"
 };

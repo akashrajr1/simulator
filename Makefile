@@ -6,4 +6,4 @@ SRC = *.c
 all: $(SRC)
 	$(CC) $(CFLAGS) -o sim.exe $(SRC)
 clean:
-	rm *.o
+	rm sim.exe

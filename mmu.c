@@ -1,14 +1,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 #include "inc/mmu.h"
 #include "inc/cache.h"
 #include "inc/error.h"
 
-static mmu_stats stats;
-
+static uint32_t rand_num;
+#define MMU_LCG_MUL	1664525
+#define MMU_LCG_INC	1013904223
 mmu_t *
-mmu_init(mmu_latency *latency_ptr)
+mmu_init(
+	mmu_latency *latency_ptr, 
+	tlb_evict eviction)
 {
 	mmu_t *mmu = (mmu_t*)malloc(sizeof(mmu));
 	memset(mmu, 0, sizeof(mmu_t));
@@ -21,6 +25,9 @@ mmu_init(mmu_latency *latency_ptr)
 		mmu->latency.mem_write = MEM_WRITE_CYCLE;
 		mmu->latency.paging = PAGING_CYCLE;
 	}
+	mmu->eviction = eviction;
+	if (mmu->eviction == TLB_EVICT_RAND)
+		rand_num = (uint32_t)time(NULL);
 	return mmu;
 }
 
@@ -41,21 +48,69 @@ mmu_append_pgtbl(
 }
 
 void *
-mmu_get_tlb(
+mmu_paging(
 	mmu_t *mmu,
 	uintptr_t va,
-	mem_type mtype,
+	mem_type type,
 	uint32_t *latency_store)
 {
-	return NULL;
+	tlb_t *tlb = NULL;
+	uint32_t ntlb = 0;
+	if (type == MEM_INST){
+		tlb = mmu->itlb;
+		ntlb = NITLB;
+	} else if (type == MEM_DATA){
+		tlb = mmu->dtlb;
+		ntlb = NDTLB;
+	}
+	int i;
+	uint32_t latency = (type == MEM_INST)?
+		mmu->latency.itlb_hit: mmu->latency.dtlb_hit;
+	void *pa = NULL;
+	uint32_t vpn = PGNUM(va);
+	for (i = 0; i < ntlb; i++)
+		if (tlb[i].valid && tlb[i].vpn == vpn){
+			pa = tlb[i].pa;
+			if (type == MEM_INST) mmu->stats.nitlb_hit ++;
+			else mmu->stats.ndtlb_hit ++;
+			goto mmu_paging_end;
+		}
+	// tlb miss, try mmu_get_page
+	if (type == MEM_INST) mmu->stats.nitlb_miss ++;
+	else mmu->stats.ndtlb_miss ++;
+	latency += mmu->latency.paging;
+	pa = mmu_get_page(mmu, va, 0);
+	if (pa == NULL) // page fault!
+		error_process(ADDR_INVAL, va);
+	for (i = 0; i < ntlb; i++)
+		if (tlb[i].valid == 0){
+			tlb[i].vpn = vpn;
+			tlb[i].pa = pa;
+			tlb[i].valid = 1;
+			goto mmu_paging_end;
+		}
+	// all entries are used, find one to evict.
+	int victim = 0;
+	if (mmu->eviction == TLB_EVICT_SEQ){
+		if (type == MEM_INST) victim = mmu->i_evic_cntr++;
+		else victim = mmu->d_evic_cntr++;
+	}else if (mmu->eviction == TLB_EVICT_RAND){
+		victim = rand_num;
+		rand_num = rand_num * MMU_LCG_MUL + MMU_LCG_INC;
+	}
+	victim %= ntlb;
+	tlb[victim].vpn = vpn;
+	tlb[victim].pa = pa;
+mmu_paging_end:
+	*latency_store = latency;
+	return pa;
 }
 
 void *
 mmu_get_page(
 	mmu_t *mmu,
 	uintptr_t va,
-	int alloc,
-	uint32_t *latency_store)
+	int alloc)
 {
 	void *pa = NULL;
 	pde_t *pde_ptr = &(mmu->pd_entries[PDX(va)]);
@@ -91,36 +146,22 @@ mmu_destroy(
 	free(mmu);
 }
 
-void
+uint32_t
 mm_store(
 	mmu_t *mmu,
-	uintptr_t va,
-	const uint32_t *data,
-	uint32_t *latency_store)
+	void *pa,
+	const void *data)
 {
-	assert(va % CACHE_LINE_SIZE == 0);
-	uint32_t *pa = mmu_get_page(mmu, va, 0, NULL);
-	if (pa == NULL)
-		error_process(ADDR_INVAL, va);
-	pa = (void*)pa + PGOFF(va);
-	int i;
-	for (i = 0; i < CACHE_LINE_WORDS; i++)
-		pa[i] = data[i];
+	memcpy(pa, data, CACHE_LINE_SIZE);
+	return mmu->latency.mem_write;
 }
 
-void
+uint32_t
 mm_load(
 	mmu_t *mmu,
-	uintptr_t va,
-	uint32_t *data,
-	uint32_t *latency_store)
+	void *pa,
+	void *data)
 {
-	assert(va % CACHE_LINE_SIZE == 0);
-	uint32_t *pa = mmu_get_page(mmu, va, 0, NULL);
-	if (pa == NULL)
-		error_process(ADDR_INVAL, va);
-	pa = (void*)pa + PGOFF(va);
-	int i;
-	for (i = 0; i < CACHE_LINE_WORDS; i++)
-		data[i] = pa[i];
+	memcpy(data, pa, CACHE_LINE_SIZE);
+	return mmu->latency.mem_read;
 }

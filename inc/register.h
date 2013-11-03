@@ -1,3 +1,0 @@
-#ifndef _UC32_SIM_REGISTER_H
-#define _UC32_SIM_REGISTER_H
-#endif /*_UC32_SIM_REGISTER_H*/

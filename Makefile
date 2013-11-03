@@ -1,9 +1,9 @@
 
 CC = clang
 CFLAGS = -O0 -g -Werror -Wall -Wno-unused-variable
-#SRC = elf.c main.c instruction.c mmu.c cache.c error.c cpu.c syscall.c
+OBJS = elf.o main.o instruction.o mmu.o cache.o error.o cpu.o syscall.o
 SRC = *.c
-all: $(SRC)
-	$(CC) $(CFLAGS) -o sim.exe $(SRC)
+all: $(OBJS)
+	$(CC) $(CFLAGS) -o sim.exe $(OBJS)
 clean:
-	rm sim.exe
+	rm sim.exe *.o

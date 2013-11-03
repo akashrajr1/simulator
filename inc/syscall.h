@@ -1,7 +1,7 @@
 #ifndef _UC32SIM_SYSCALL_H
 #define _UC32SIM_SYSCALL_H
 
-#include "cpu.h"
+#include "declarations.h"
 
 #define O_RDONLY	0
 #define O_WRONLY	1
@@ -13,7 +13,10 @@
 #define SEEK_CUR	1
 #define SEEK_END	2
 
+#define SYSCALL_CYCLES	128
+
 #define SYSCALL_BASE	0x900000
+#define SYSCALL_MAX		0x900013
 
 typedef enum {
 	SYS_exit  = 0x900001,
@@ -24,11 +27,13 @@ typedef enum {
 	SYS_lseek = 0x900013
 } syscall_num;
 
+extern uint32_t syscall_stats[];
+
 /*
  * Due to Cache/MMU designs, we have to pretend that syscall
  * does not access Cache or MMU at all.
  * syscall will use mmu_get_page, and directly operates on host memory.
  */
-void syscall(syscall_num num, cpu_t *cpu);
+uint32_t syscall(syscall_num num, cpu_t *cpu);
 
 #endif

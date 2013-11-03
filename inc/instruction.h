@@ -1,17 +1,21 @@
 #ifndef _UC32SIM_INSTRUCTION_H
 #define _UC32SIM_INSTRUCTION_H
-#include <stdint.h>
+#include "declarations.h"
 // #define INST_OP(inst) ((uint32_t)(inst)>>24)
 #define REG_LIST(inst) (((uint32_t)inst & 0x1f) + (((uint32_t)inst>>4) & 0x7fe0))
 #define FUNC_GET_SHIFT(func) ((func & FUNC_SHIFT_MASK)>>1)
-#define OP_BRANCH 		8
-#define FUNC_MUL_BR 	9
+#define OP_BRANCH_CNT 	8
+#define OP_MUL_LONG 	4
+#define OP_MUL_UNSIGN	2
+#define OP_MUL_ADD		1
+#define OP_CNT_ZERO		2
+#define OP_CNT 			1
+#define FUNC_MUL_BR_CNT 9
+#define FUNC_NOT_ALU	8
 #define FUNC_SHIFT_MASK	6
 #define FUNC_SIGN_EXT	4
 #define FUNC_BYTE_HALF	2
-#define MUL_LONG 		4
-#define MUL_UNSIGN		2
-#define MUL_ADD			1
+#define FUNC_REG_IMM	1
 
 typedef enum {
 	COND_EQ	= 0,// equal, Z=1
@@ -113,7 +117,7 @@ const static char *alu_op_str[] = {
 
 typedef uint32_t reg_num;
 
-typedef struct {
+struct _general_inst{
 	uint32_t rm:	5;
 	uint32_t func:	4;
 	uint32_t rs:	5;
@@ -122,7 +126,7 @@ typedef struct {
 	uint32_t flag:	1;
 	uint32_t opcode:4;
 	uint32_t id:	3;
-} general_inst;
+};
 
 typedef struct{
 	uint32_t imm:	9;
@@ -185,17 +189,6 @@ typedef struct {
 	uint32_t opcode:	8;
 } soft_trap_inst;
 
-typedef struct {
-	uint32_t N:		1;
-	uint32_t Z:		1;
-	uint32_t C:		1;
-	uint32_t V:		1;
-	uint32_t unused:20;
-	uint32_t I:		1;
-	uint32_t F:		1;
-	uint32_t T:		1;
-	uint32_t mode:	5;
-} flags_reg;
 
-void dispatch_inst(general_inst);
+uint32_t inst_dispatch(cpu_t *cpu, general_inst inst);
 #endif /* !_UC32SIM_INSTRUCTION_H */

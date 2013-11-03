@@ -4,7 +4,7 @@
 typedef enum{
 	ADDR_INVAL = 1,
 	INST_INVAL,
-	NO_SYSCALL
+	NO_SYSCALL,
 } simulator_error;
 
 const static char *error_names[] = {

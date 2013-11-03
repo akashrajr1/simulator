@@ -2,6 +2,7 @@
 #include <string.h>
 #include <time.h>
 #include "inc/cache.h"
+#include "inc/mmu.h"
 #include "inc/misc.h"
 static uint32_t rand_num;
 #define CACHE_LCG_MUL	214013

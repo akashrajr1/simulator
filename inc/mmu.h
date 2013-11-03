@@ -20,7 +20,7 @@
  *
  * Use virtual page on host as physcal page for the program being simulated.
  */
-#include <stdint.h>
+#include "declarations.h"
 
 #define PTXSHIFT	12
 #define PDXSHIFT	22
@@ -88,7 +88,7 @@ typedef enum {
 	TLB_EVICT_RAND
 } tlb_evict;
 
-typedef struct{
+struct _mmu{
 	pde_t		pd_entries[NPDENTRIES];
 	tlb_t 		itlb[NITLB];
 	tlb_t 		dtlb[NDTLB];
@@ -99,12 +99,8 @@ typedef struct{
 	mmu_stats 	stats;
 	mmu_latency latency;
 	tlb_evict 	eviction;
-} mmu_t;
+};
 
-typedef enum {
-	MEM_INST = 0,
-	MEM_DATA
-} mem_type;
 
 
 /* functions for the simulator */

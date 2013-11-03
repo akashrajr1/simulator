@@ -1,9 +1,6 @@
 #ifndef _UC32SIM_ELF_H
 #define _UC32SIM_ELF_H
-
-#include "mmu.h"
-#include <stdint.h>
-
+#include "declarations.h"
 
 #define ELF_MAGIC 0x464C457FU	/* "\x7FELF" in little endian */
 

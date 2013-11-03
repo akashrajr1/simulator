@@ -2,6 +2,8 @@
 #include "inc/elf.h"
 #include "inc/misc.h"
 #include "inc/cpu.h"
+#include "inc/cache.h"
+#include "inc/mmu.h"
 
 static void
 stack_allocate(mmu_t *mmu){

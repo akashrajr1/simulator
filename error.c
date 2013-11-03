@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include "inc/error.h"
+#include "inc/cpu.h"
 void
 error_process(
 	simulator_error err,
@@ -12,5 +13,5 @@ error_process(
 	 * should dump registers, stack trace, address mapping etc.
 	 * exit for now.
 	 */
-	exit(0);
+	longjmp(cpu_exec_buf, err);
 }

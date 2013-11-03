@@ -1,7 +1,6 @@
 #ifndef _UC32SIM_CACHE_H
 #define _UC32SIM_CACHE_H
-#include <stdint.h> 
-#include "mmu.h"
+#include "declarations.h"
 /*
  * Instruction-Cache: tag/valid
  * Data-Cache: tag/valid/hi-dirty/lo-dirty
@@ -71,14 +70,14 @@ typedef struct {
 	void* 	 pa[CACHE_SET_ASSOC];
 } cache_set_t;
 
-typedef struct {
+struct _cache {
 	cache_set_t icache[NCACHE_SET];
 	cache_set_t dcache[NCACHE_SET];
 	mmu_t *mmu;
 	cache_stats stats;
 	cache_latency latency;
 	cache_evict eviction;
-} cache_t;
+};
 
 
 cache_t *cache_init(mmu_t *mmu, cache_latency *latency_ptr, cache_evict eviction);

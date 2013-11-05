@@ -2,12 +2,70 @@
 #include "inc/error.h"
 #include "inc/cpu.h"
 #include "inc/syscall.h"
+#include "inc/cache.h"
 #include <stdio.h>
 
 #define REG(num) exec_cpu->reg[num]
 #define FLAGS 	exec_cpu->flags
 
 static cpu_t *exec_cpu = NULL;
+
+const char *shift_str[] = {
+	"<<",
+	"l>>",
+	"a>>",
+	"<>"
+};
+const char* cond_str[] = {
+	"equal",
+	"not-equal",
+	"unsigned-greater-equal",
+	"unsigned-less-than",
+	"negative",
+	"not-negative",
+	"overflow",
+	"not-overflow",
+	"unsigned-greater-than",
+	"unsigned-less-equal",
+	"signed-greater-equel",
+	"signed-less-than",
+	"signed-greater-than",
+	"signed-less-equal",
+	"always"
+};
+
+const char *alu_op_str[] = {
+	"&",
+	"^",
+	"-",
+	"R-",
+	"+",
+	"+C",
+	"-C",
+	"R-C",
+	"&",
+	"^",
+	"-",
+	"+",
+	"|",
+	"",
+	"& ~",
+	"~"
+};
+
+const static char *alu_inst_fmt[] = {
+	"ALU %s r%d = r%d %s (r%d %s %d)\n",
+	"ALU %s r%d = r%d %s (r%d %s r%d)\n"
+};
+const static char *cmp_inst_fmt[] = {
+	"ALU update-flags r%d %s (r%d %s %d)\n",
+	"ALU update-flags r%d %s (r%d %s r%d)\n"
+};
+const static char *cmov_inst_fmt[] = {
+	"ALU %s when %s r%d = %s (r%d %s %d)\n",
+	"ALU %s when %s r%d = %s (r%d %s r%d)\n"
+};
+
 static void
 illegal_inst(
 	general_inst *inst)
@@ -156,39 +214,52 @@ exec_shift(
 	shift_type shift,
 	uint32_t *carry_ptr)
 {
-	*carry_ptr = FLAGS.C;
+	uint32_t carry = FLAGS.C;
 	switch (shift){
 	case LEFT:
-		if (s) *carry_ptr = ((val & (1<<(32-s))) != 0);
+		if (s) carry = ((val & (1<<(32-s))) != 0);
 		val <<= s; break;
 	case LOGIC_RIGHT:
 		if (s == 0){
-			*carry_ptr = ((val & (1<<31)) != 0);
+			carry = ((val & (1<<31)) != 0);
 			val = 0;
 		}else{
-			*carry_ptr = ((val & (1<<(s-1))) != 0);
+			carry = ((val & (1<<(s-1))) != 0);
 			val >>= s;
 		}
 		break;
 	case ARITH_RIGHT:
 		if (s == 0){
 			val = (int32_t)val >> 31;
-			*carry_ptr = (val != 0);
+			carry = (val != 0);
 		}else{
-			*carry_ptr = ((val & (1<<(s-1))) != 0);
+			carry = ((val & (1<<(s-1))) != 0);
 			val = (int32_t)val >> s;
 		}
 		break;
 	case ROTATE:
 		if (s) {
-			*carry_ptr = ((val & (1<<(s-1))) != 0);
+			carry = ((val & (1<<(s-1))) != 0);
 			val = (((val & ((1<<s)-1))<<(32-s)) | (val >> s));
 		}else{
-			*carry_ptr = (val & 1);
+			carry = (val & 1);
 			val = (val >> 1) | (FLAGS.C<<31);
 		}
 		break;
+	case IMM_ROTATE:
+		if (s){
+			carry = ((val & (1<<(s-1))) != 0);
+			val = (((val & ((1<<s)-1))<<(32-s)) | (val >> s)); 
+		}
+		break;
+	case LDST_LR:
+		val >>= s;
+		break;
+	case LDST_AR:
+		val = (int32_t)val>>s;
+		break;
 	}
+	if (carry_ptr != NULL) *carry_ptr = carry;
 	return val;
 }
 
@@ -270,18 +341,6 @@ exec_update_flags(
 	}
 }
 
-const static char *alu_inst_fmt[] = {
-	"ALU %s r%d = r%d %s (r%d %s %d)\n",
-	"ALU %s r%d = r%d %s (r%d %s r%d)\n"
-};
-const static char *cmp_inst_fmt[] = {
-	"ALU update-flags r%d %s (r%d %s %d)\n",
-	"ALU update-flags r%d %s (r%d %s r%d)\n"
-};
-const static char *cmov_inst_fmt[] = {
-	"ALU %s when %s r%d = %s (r%d %s %d)\n",
-	"ALU %s when %s r%d = %s (r%d %s r%d)\n"
-};
 static uint32_t
 exec_alu_reg_imm(
 	reg_num rd,
@@ -335,16 +394,37 @@ exec_alu_imm_rotate(
 	alu_opcode opcode,
 	uint32_t flag)
 {
-	if (opcode < ALU_CMP_AND || opcode == ALU_OR || opcode == ALU_AND_NOT)
-		printf("%supdate-flags r%d = r%d %s (%d <> %d)\n", flag?"":"no-",
+	uint32_t write_res = 0;
+	uint32_t latency = 0;
+	if (opcode < ALU_CMP_AND || opcode == ALU_OR || opcode == ALU_AND_NOT){
+		write_res = 1;
+		latency = ALU_CYCLES;
+		printf("ALU %s r%d = r%d %s (%d <> %d)\n", flag?"update-flags":"",
 			rd, rs, alu_op_str[opcode], imm9, rotate);
-	else if (opcode >= ALU_CMP_AND && opcode <= ALU_CMP_ADD)
-		printf("update-flags r%d %s (%d <> %d)\n",
+	}
+	else if (opcode >= ALU_CMP_AND && opcode <= ALU_CMP_ADD){
+		flag = 1;
+		latency = ALU_CYCLES;
+		printf("ALU update-flags r%d %s (%d <> %d)\n",
 			rs, alu_op_str[opcode], imm9, rotate);
-	else
-		printf("%supdate-flags when %s r%d = %s (%d <> %d)\n", flag?"":"no-",
-			cond_str[(rs & 0x10)? rs & 0xf: COND_AL], rd, alu_op_str[opcode], imm9, rotate);
-	return 0;
+	}else{
+		cond_code cond = (rs & 0x10)? rs & 0xf: COND_AL;
+		write_res = exec_test_cond(cond);
+		if (!write_res){
+			latency = CMOV_NOWR_CYCLES;
+			goto exec_alu_imm_rotate_end;
+		}else
+			latency = CMOV_WRITE_CYCLES;
+		printf("ALU %s when %s r%d = %s (%d <> %d)\n", flag?"update-flags":"",
+			cond_str[cond], rd, alu_op_str[opcode], imm9, rotate);
+	}
+	uint32_t value1 = REG(rs), shift_c;
+	uint32_t value2 = exec_shift(imm9, rotate, IMM_ROTATE, &shift_c);
+	uint32_t res = exec_alu_compute(value1, value2, opcode);
+	if (flag) exec_update_flags(res, value1, value2, shift_c, opcode);
+	if (write_res) REG(rd) = res;
+exec_alu_imm_rotate_end:
+	return latency;
 }
 
 static uint32_t
@@ -365,7 +445,22 @@ exec_reg_shift_ld_st(
 		loadstore?"load":"store", byteword?"byte":"word", rdata, rbase,
 		prepost?"pre":"post", addsub?"add":"sub", rindex, shift_str[shift],
 		imm5, writeback?"":"no-");
-	return 0;
+	if (shift == LOGIC_RIGHT) shift = LDST_LR;
+	if (shift == ARITH_RIGHT) shift = LDST_AR;
+	uint32_t offset = exec_shift(REG(rindex), imm5, shift, NULL);
+	uint32_t mem_addr, wb_addr, latency;
+	wb_addr = (addsub? offset: -offset) + REG(rbase);
+	mem_addr = prepost? wb_addr: REG(rbase);
+	if (loadstore){
+		uint32_t mem_word = cache_load(exec_cpu->cache, mem_addr, MEM_DATA, &latency);
+		REG(rdata) = byteword? ((uint8_t*)&mem_word)[mem_addr & 3]: mem_word;
+	}else{
+		cache_dstore(exec_cpu->cache, mem_addr, REG(rdata) & (byteword?0xff:~0),
+			byteword? MM_BYTE: MM_WORD, &latency);
+	}
+	if (writeback) REG(rbase) = wb_addr;
+	latency += ADDR_CALC_CYCLES;
+	return latency;
 }
 
 static uint32_t
@@ -383,16 +478,36 @@ exec_half_ext_ld_st(
 	uint32_t signzero)
 {
 	if (!prepost) writeback = 1;
-	if (immreg)
+	uint32_t offset = 0;
+	if (immreg){
 		printf("%s %s-extend %s data:r%d addr:r%d %s-%s offset: %d %swrite-back\n",
 			loadstore?"load":"store", signzero?"sign":"zero", bytehalf?"byte":"half",
 			rdata, rbase, prepost?"pre":"post", addsub?"add":"sub", (imm5<<5)+roffset,
 			writeback?"":"no-");
-	else
+		offset = (imm5<<5)+roffset;
+	}
+	else{
 		printf("%s %s-extend %s data:r%d addr:r%d %s-%s offset: r%d %swrite-back\n",
 			loadstore?"load":"store", signzero?"sign":"zero", bytehalf?"byte":"half",
 			rdata, rbase, prepost?"pre":"post", addsub?"add":"sub", roffset, writeback?"":"no-");
-	return 0;
+		offset = REG(roffset);
+	}
+	uint32_t mem_addr = 0, wb_addr = 0, latency;
+	wb_addr = (addsub? offset: -offset) + REG(rbase);
+	mem_addr = prepost? wb_addr: REG(rbase);
+	if (loadstore){
+		uint32_t mem_word = cache_load(exec_cpu->cache, mem_addr, MEM_DATA, &latency);
+		if (bytehalf)
+			REG(rdata) = signzero? (int32_t)((int8_t)mem_word): (uint32_t)((uint8_t)mem_word);
+		else
+			REG(rdata) = signzero? (int32_t)((int16_t)mem_word): (uint32_t)((uint16_t)mem_word);
+	}else{
+		// QUESTION: How to deal with sign/zero extend?
+		cache_dstore(exec_cpu->cache, mem_addr, REG(rdata), bytehalf? MM_BYTE: MM_HALFWORD, &latency);
+	}
+	if (writeback) REG(rbase) = wb_addr;
+	latency += ADDR_CALC_CYCLES;
+	return latency;
 }
 
 static uint32_t
@@ -410,9 +525,30 @@ exec_imm_ld_st(
 	printf("%s data:r%d addr:r%d %s-%s offset:%d %swrite-back\n",
 		loadstore?"load":"store", rdata, rbase, prepost?"pre":"post",
 		addsub?"add":"sub", imm14, writeback?"":"no-");
-	return 0;
+	uint32_t mem_addr = 0, wb_addr = 0, latency;
+	wb_addr = (addsub? imm14: -imm14) + REG(rbase);
+	mem_addr = prepost? wb_addr: REG(rbase);
+	if (loadstore){
+		uint32_t mem_word = cache_load(exec_cpu->cache, mem_addr, MEM_DATA, &latency);
+		REG(rdata) = byteword? ((uint8_t*)&mem_word)[mem_addr & 3]: mem_word;
+	}else{
+		cache_dstore(exec_cpu->cache, mem_addr, REG(rdata) & (byteword?0xff:~0),
+			byteword? MM_BYTE: MM_WORD, &latency);
+	}
+	if (writeback) REG(rbase) = wb_addr;
+	latency += ADDR_CALC_CYCLES;
+	return latency;
 }
 
+static uint32_t
+bitcount(
+	uint32_t x)
+{
+	x = (x & (~0u/3)) | ((x>>1) & (~0u/3));
+	x = (x & (~0u/5)) | ((x>>2) & (~0u/5));
+	x = (x & (~0u/17)) | ((x>>4) & (~0u/17));
+	return x & 0x3f;
+}
 static uint32_t
 exec_multi_ld_st(
 	reg_num rbase,
@@ -426,7 +562,22 @@ exec_multi_ld_st(
 	printf("multiple %s list:%08x addr:r%d %s-%s %swrite-back\n",
 		loadstore?"load":"store", reglist, rbase, prepost?"pre":"post",
 		addsub?"add":"sub", writeback?"":"no-");
-	return 0;
+	uint32_t nregs = bitcount(reglist), i = 0, latency = ADDR_CALC_CYCLES;
+	uint32_t mem_addr = REG(rbase) + (addsub? 0: -4 * nregs);
+	while (reglist){
+		if (reglist & 1){
+			uint32_t tmp;
+			if (prepost == addsub) mem_addr += 4;
+			REG(i) = cache_load(exec_cpu->cache, mem_addr, MEM_DATA, &tmp);
+			if (prepost != addsub) mem_addr += 4;
+			latency += tmp;
+		}
+		reglist >>= 1;
+		i++;
+	}
+	if (writeback)
+		REG(rbase) = addsub? mem_addr: REG(rbase) - 4 * nregs;
+	return latency;
 }
 
 static uint32_t

@@ -2,6 +2,7 @@
 #define _UC32SIM_DECLARATIONS_H
 #include <setjmp.h>
 #include <stdint.h>
+#include <stddef.h>
 typedef struct _cpu cpu_t;
 typedef struct _general_inst general_inst;
 typedef struct {

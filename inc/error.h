@@ -7,11 +7,7 @@ typedef enum{
 	NO_SYSCALL,
 } simulator_error;
 
-const static char *error_names[] = {
-	[ADDR_INVAL] = "Invalid address (page fault)",
-	[INST_INVAL] = "Invalid instruction",
-	[NO_SYSCALL] = "System call error"
-};
+extern const char *error_names[];
 /*
  * process an (fatal) error.
  * TODO: long jump to cpu module.

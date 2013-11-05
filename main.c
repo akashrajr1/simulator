@@ -4,10 +4,12 @@
 #include "inc/cpu.h"
 #include "inc/cache.h"
 #include "inc/mmu.h"
+#include "inc/instruction.h"
+#include "inc/unittest.h"
 
 static void
 stack_allocate(mmu_t *mmu){
-	uintptr_t va = USER_STACK_TOP - USER_STACK_SIZE;
+	uint32_t va = USER_STACK_TOP - USER_STACK_SIZE;
 	while (va < USER_STACK_TOP){
 		mmu_get_page(mmu, va, 1);
 		va += PGSIZE;
@@ -16,12 +18,8 @@ stack_allocate(mmu_t *mmu){
 
 int main(int argc, char *argv[])
 {
-	// static_assert(sizeof(general_inst) == 4);
-	// static_assert(sizeof(imm9_inst) == 4);
-	// static_assert(sizeof(imm14_inst) == 4);
-	// static_assert(sizeof(cond_branch_inst) == 4);
-	// static_assert(sizeof(soft_trap_inst) == 4);
-	// static_assert(sizeof(status_reg) == 4);
+	run_unit_tests();
+
 	printf("Hello! This is Unicore32 Simulator\n");
 	Elf *elfhdr;
 	FILE *elf = elf_check(argv[1], &elfhdr);
@@ -33,6 +31,7 @@ int main(int argc, char *argv[])
 	cpu_t *cpu = cpu_init(cache, mmu);
 	stack_allocate(mmu);
 	exec_result res = cpu_exec(cpu, USER_STACK_TOP, elfhdr->e_entry);
+	printf(res == EXEC_ABORT? "execution aborted.\n": "execution finished.\n");
 	mmu_destroy(mmu);
 	cache_destroy(cache);
 	cpu_destroy(cpu);

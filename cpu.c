@@ -35,15 +35,15 @@ cpu_exec(
 	/* ... 
 	 * execute
 	 */
-	 while (cpu->exec_finished == 0){
-	 	uint32_t cycles;
-	 	general_inst inst;
-	 	*(uint32_t*)&inst = cache_load(cpu->cache, cpu->reg[PC_NUM], MEM_INST, &cycles);
-	 	cpu->reg[PC_NUM] += 4;
-	 	cycles += inst_dispatch(cpu, inst);
-	 	cpu->stats.ncycle += cycles;
-	 	cpu->stats.ninst ++;
-	 }
+	while (cpu->exec_finished == 0){
+		uint32_t cycles;
+		general_inst inst;
+		*(uint32_t*)&inst = cache_load(cpu->cache, cpu->reg[PC_NUM], MEM_INST, &cycles);
+		cpu->reg[PC_NUM] += 4;
+		cycles += inst_dispatch(cpu, inst);
+		cpu->stats.ncycle += cycles;
+		cpu->stats.ninst ++;
+	}
 	return EXEC_FINISH;
 }
 

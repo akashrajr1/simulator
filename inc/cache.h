@@ -88,7 +88,7 @@ void cache_destroy(cache_t *cache);
  * both write latency cycle count to *latency_ptr
  * for the simulated program, ALL memory access goes through these functions.
  */
-uint32_t cache_load(cache_t *cache, uintptr_t va, mem_type type, uint32_t *latency_store);
-void cache_dstore(cache_t *cache, uintptr_t va, uint32_t value, mem_size size, uint32_t *latency_store);
+uint32_t cache_load(cache_t *cache, uint32_t va, mem_type type, uint32_t *latency_store);
+void cache_dstore(cache_t *cache, uint32_t va, uint32_t value, mem_size size, uint32_t *latency_store);
 
 #endif /* !_UC32SIM_CACHE_H */

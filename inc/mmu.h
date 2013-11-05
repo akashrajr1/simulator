@@ -26,13 +26,13 @@
 #define PDXSHIFT	22
 
 // virtual page number
-#define PGNUM(va)	(((uintptr_t) (va)) >> PTXSHIFT)
+#define PGNUM(va)	(((uint32_t) (va)) >> PTXSHIFT)
 // page directory index
-#define PDX(va)		((((uintptr_t) (va)) >> PDXSHIFT) & 0x3FF)
+#define PDX(va)		((((uint32_t) (va)) >> PDXSHIFT) & 0x3FF)
 // page table index
-#define PTX(va)		((((uintptr_t) (va)) >> PTXSHIFT) & 0x3FF)
+#define PTX(va)		((((uint32_t) (va)) >> PTXSHIFT) & 0x3FF)
 // offset in page
-#define PGOFF(va)	(((uintptr_t) (va)) & 0xFFF)
+#define PGOFF(va)	(((uint32_t) (va)) & 0xFFF)
 // construct linear address from indexes and offset
 #define PGADDR(d, t, o)	((void*) ((d) << PDXSHIFT | (t) << PTXSHIFT | (o)))
 // Page directory and page table constants.
@@ -113,8 +113,8 @@ void mmu_destroy(mmu_t *mmu);
  *
  * the simulator also use mmu_get_page to allocate pages.
  */
-void *mmu_paging(mmu_t *mmu, uintptr_t va, mem_type type, uint32_t *latency_store);
-void *mmu_get_page(mmu_t *mmu, uintptr_t va, int alloc);
+void *mmu_paging(mmu_t *mmu, uint32_t va, mem_type type, uint32_t *latency_store);
+void *mmu_get_page(mmu_t *mmu, uint32_t va, int alloc);
 /* 
  * functions for the cache module 
  * MMU operates on 32-bytes (8-words) cache lines.

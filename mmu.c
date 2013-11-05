@@ -14,7 +14,12 @@ mmu_init(
 	mmu_latency *latency_ptr, 
 	tlb_evict eviction)
 {
-	mmu_t *mmu = (mmu_t*)malloc(sizeof(mmu));
+	/**** DAMN!!! code was:
+	 **** mmu_t *mmu = (mmu_t*)malloc(sizeof(mmu));
+	 **** bloody hell, see that `sizeof(mmu)`?
+	 http://stackoverflow.com/questions/1868719/sigsegv-seemingly-caused-by-printf
+	 GuardMalloc solved everything ***/
+	mmu_t *mmu = (mmu_t*)malloc(sizeof(mmu_t));
 	memset(mmu, 0, sizeof(mmu_t));
 	if (latency_ptr)
 		mmu->latency = *latency_ptr;
@@ -28,6 +33,10 @@ mmu_init(
 	mmu->eviction = eviction;
 	if (mmu->eviction == TLB_EVICT_RAND)
 		rand_num = (uint32_t)time(NULL);
+	else{
+		mmu->i_evic_cntr = (uint32_t)time(NULL) * MMU_LCG_MUL + MMU_LCG_INC;
+		mmu->d_evic_cntr = mmu->i_evic_cntr * MMU_LCG_MUL + MMU_LCG_INC;
+	}
 	return mmu;
 }
 
@@ -50,7 +59,7 @@ mmu_append_pgtbl(
 void *
 mmu_paging(
 	mmu_t *mmu,
-	uintptr_t va,
+	uint32_t va,
 	mem_type type,
 	uint32_t *latency_store)
 {
@@ -90,7 +99,8 @@ mmu_paging(
 			goto mmu_paging_end;
 		}
 	// all entries are used, find one to evict.
-	int victim = 0;
+	// victim should be unsigned
+	uint32_t victim = 0;
 	if (mmu->eviction == TLB_EVICT_SEQ){
 		if (type == MEM_INST) victim = mmu->i_evic_cntr++;
 		else victim = mmu->d_evic_cntr++;
@@ -102,14 +112,14 @@ mmu_paging(
 	tlb[victim].vpn = vpn;
 	tlb[victim].pa = pa;
 mmu_paging_end:
-	*latency_store = latency;
+	if (latency_store != NULL) *latency_store = latency;
 	return pa;
 }
 
 void *
 mmu_get_page(
 	mmu_t *mmu,
-	uintptr_t va,
+	uint32_t va,
 	int alloc)
 {
 	void *pa = NULL;

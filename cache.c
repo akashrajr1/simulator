@@ -4,6 +4,7 @@
 #include "inc/cache.h"
 #include "inc/mmu.h"
 #include "inc/misc.h"
+#include <assert.h>
 static uint32_t rand_num;
 #define CACHE_LCG_MUL	214013
 #define CACHE_LCG_INC	2531011
@@ -39,7 +40,7 @@ cache_destroy(
 static int
 cache_load_line(
 	cache_t *cache,
-	uintptr_t va,
+	uint32_t va,
 	mem_type type,
 	uint32_t *latency_store)
 {
@@ -48,8 +49,6 @@ cache_load_line(
 	cache_set_t *cache_set = (type == MEM_INST)? cache->icache: cache->dcache;
 	cache_set += CACHE_INDEX(va);
 	int i;
-	uint32_t data = 0;
-	uint8_t order = 0;
 	latency = max(latency, cache->latency.read_hit);
 	for (i = 0; i < CACHE_SET_ASSOC; i++)
 		if (cache_set->valid[i] && cache_set->pa[i] == pa){
@@ -59,6 +58,8 @@ cache_load_line(
 		}
 	// i-cache miss
 	uint32_t *cache_line = NULL;
+	// cache line not in use is put on the end of the queue
+	uint8_t old_order = 3;
 	if (type == MEM_INST) cache->stats.i_miss ++;
 	else cache->stats.d_miss ++;
 	for (i = 0; i < CACHE_SET_ASSOC; i++)
@@ -71,10 +72,12 @@ cache_load_line(
 			for (i = 0; i < CACHE_SET_ASSOC; i++)
 				if (cache_set->order[i] == CACHE_SET_ASSOC-1)
 					break;
+			assert(i!=CACHE_SET_ASSOC);
 		}else if (cache->eviction == CACHE_EVICT_RAND){
 			i = rand_num % CACHE_SET_ASSOC;
 			rand_num = rand_num * CACHE_LCG_MUL + CACHE_LCG_INC;
 		}
+		old_order = cache_set->order[i];
 		cache_line = cache_set->data[i];
 		if (cache_set->dirty[i]) // write-back on eviction
 			latency += mm_store(cache->mmu, pa + CACHE_ALIGN(va), cache_line);
@@ -84,19 +87,24 @@ cache_load_line(
 	latency += mm_load(cache->mmu, pa + CACHE_ALIGN(va), cache_line);
 	cache_set->dirty[i] = 0;
 cache_load_lru:
-	cache_set->order[i] = 0; // recently used.
+	if (cache->eviction != CACHE_EVICT_LRU) goto cache_load_line_end;
 	int j;
+	cache_set->order[i] = 0; // recently used.
 	for (j = 0; j < CACHE_SET_ASSOC; j++)
-		if (i != j)
+		// VERY IMPORTANT: when a cache line is moved to the front of
+		// the queue (position stored in order), only lines before it
+		// move back by one. Don't modify those behind it.
+		if (cache_set->valid[j] && cache_set->order[j] < old_order)
 			cache_set->order[j] ++;
-	*latency_store = latency;
+cache_load_line_end:
+	if (latency_store != NULL) *latency_store = latency;
 	return i;
 }
 
 uint32_t
 cache_load(
 	cache_t *cache,
-	uintptr_t va,
+	uint32_t va,
 	mem_type type,
 	uint32_t *latency_store)
 {
@@ -109,7 +117,7 @@ cache_load(
 void
 cache_dstore(
 	cache_t *cache,
-	uintptr_t va,
+	uint32_t va,
 	uint32_t value,
 	mem_size size,
 	uint32_t *latency_store)
@@ -128,5 +136,6 @@ cache_dstore(
 		case MM_HALFWORD:
 			*((uint16_t*)word_ptr + ((va>>1) & 1)) = (uint16_t)value;
 	}
-	*latency_store = max(cache->latency.write_hit, latency);
+	if (latency_store != NULL)
+		*latency_store = max(cache->latency.write_hit, latency);
 }

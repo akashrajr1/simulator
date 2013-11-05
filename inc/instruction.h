@@ -35,23 +35,7 @@ typedef enum {
 	COND_AL,	// always.
 } cond_code;
 
-const static char* cond_str[] = {
-	"equal",
-	"not-equal",
-	"unsigned-greater-equal",
-	"unsigned-less-than",
-	"negative",
-	"not-negative",
-	"overflow",
-	"not-overflow",
-	"unsigned-greater-than",
-	"unsigned-less-equal",
-	"signed-greater-equel",
-	"signed-less-than",
-	"signed-greater-than",
-	"signed-less-equal",
-	"always"
-};
+extern const char* cond_str[];
 
 typedef enum {
 	REG_ALU = 0,
@@ -67,15 +51,13 @@ typedef enum {
 	LEFT = 0,
 	LOGIC_RIGHT,
 	ARITH_RIGHT,
-	ROTATE
+	ROTATE,
+	IMM_ROTATE,
+	LDST_LR, 
+	LDST_AR
 } shift_type;
 
-const static char *shift_str[] = {
-	"<<",
-	"l>>",
-	"a>>",
-	"<>"
-};
+extern const char *shift_str[];
 
 typedef enum {
 	ALU_AND = 0,
@@ -96,24 +78,7 @@ typedef enum {
 	ALU_COND_MVN
 } alu_opcode;
 
-const static char *alu_op_str[] = {
-	"&",
-	"^",
-	"-",
-	"R-",
-	"+",
-	"+C",
-	"-C",
-	"R-C",
-	"&",
-	"^",
-	"-",
-	"+",
-	"|",
-	"",
-	"& ~",
-	"~"
-};
+extern const char *alu_op_str[];
 
 typedef uint32_t reg_num;
 

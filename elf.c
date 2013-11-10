@@ -55,6 +55,7 @@ FILE *elf_check(const char* filename, Elf **elf_store){
 #endif
 }
 
+/*
 void elf_load(FILE *elf, Elf *elfhdr, mmu_t *mmu){
 	int i;
 	for (i = 0; i < elfhdr->e_phnum; i++){
@@ -81,5 +82,36 @@ void elf_load(FILE *elf, Elf *elfhdr, mmu_t *mmu){
 			}
 		}
 		// printf("loaded %d bytes to va %08x (%d bytes in memory)\n", ph.p_filesz, ph.p_va, ph.p_memsz);
+	}
+}
+*/
+#define ROUNDDOWN(val) ((val)-(val)%PGSIZE)
+void
+elf_load(
+	FILE *elf,
+	Elf *elfhdr,
+	mmu_t *mmu)
+{
+	int i;
+	Proghdr ph;
+	uint8_t page_buf[PGSIZE];
+	for (i = 0; i < elfhdr->e_phnum; i++){
+		fseek(elf, elfhdr->e_phoff + i * sizeof(Proghdr), SEEK_SET);
+		fread(&ph, sizeof(Proghdr), 1, elf);
+		if (ph.p_type != PT_LOAD) continue;
+		uint32_t va_first = ROUNDDOWN(ph.p_va), va_last = ROUNDDOWN(ph.p_va + ph.p_memsz);
+		while (va_first <= va_last){
+			mmu_get_page(mmu, va_first, 1);
+			va_first += PGSIZE;
+		}
+		uint32_t has_read = 0;
+		fseek(elf, ph.p_offset, SEEK_SET);
+		while (has_read < ph.p_filesz){
+			void *pa = mmu_get_page(mmu, ph.p_va + has_read, 0);
+			uint32_t padding = (ph.p_va + has_read) % PGSIZE;
+			uint32_t to_read = min(PGSIZE-padding, ph.p_filesz-has_read);
+			fread(pa + padding, 1, to_read, elf);
+			has_read += to_read;
+		}
 	}
 }

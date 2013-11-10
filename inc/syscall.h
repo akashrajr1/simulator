@@ -24,7 +24,8 @@ typedef enum {
 	SYS_write = 0x900004,
 	SYS_open  = 0x900005,
 	SYS_close = 0x900006,
-	SYS_lseek = 0x900013
+	SYS_lseek = 0x900013,
+	SYS_putint = 0x9000ff
 } syscall_num;
 
 extern uint32_t syscall_stats[];
@@ -34,6 +35,6 @@ extern uint32_t syscall_stats[];
  * does not access Cache or MMU at all.
  * syscall will use mmu_get_page, and directly operates on host memory.
  */
-uint32_t syscall(syscall_num num, cpu_t *cpu);
+uint32_t perform_syscall(syscall_num num, cpu_t *cpu);
 
 #endif

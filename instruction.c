@@ -3,8 +3,8 @@
 #include "inc/cpu.h"
 #include "inc/syscall.h"
 #include "inc/cache.h"
-#include <stdio.h>
-
+// #include <stdio.h>
+#define printf(...) do{}while(0)
 #define REG(num) exec_cpu->reg[num]
 #define FLAGS 	exec_cpu->flags
 
@@ -99,12 +99,14 @@ exec_cnt_bits(
 		if (value>>28 == 0) {bit_cnt += 4; value <<= 4;}
 		if (value>>30 == 0) {bit_cnt += 2; value <<= 2;}
 		if (value>>31 == 0) { bit_cnt++; if (value == 0) bit_cnt++;}
+		printf("count leading zeroes r%d <- r%d\n", rd, rs);
 	}else{
 		if (value>>16 == 0xffff) {bit_cnt += 16; value <<= 16;}
 		if (value>>24 == 0xff) {bit_cnt += 8; value <<= 8;}
 		if (value>>28 == 0xf) {bit_cnt += 4; value <<= 4;}
 		if (value>>30 == 0x3) {bit_cnt += 2; value <<= 2;}
 		if (value>>31 == 0x1) {bit_cnt++; if (value == 0xC0000000) bit_cnt++;}
+		printf("count leading ones r%d <- r%d\n", rd, rs);
 	}
 	REG(rd) = bit_cnt;
 	return CNTL_CYCLES;
@@ -149,9 +151,13 @@ exec_long_mul(
 {
 	int64_t value = add?((((uint64_t)REG(rd_high))<<32) + REG(rd_low)):0ll;
 	if (unsign)
+		// value += (uint64_t)REG(rs1) * (uint64_t)REG(rs2);
 		value += (uint64_t)REG(rs1) * (uint64_t)REG(rs2);
 	else
-		value += (int64_t)REG(rs1) * (int64_t)REG(rs2);
+		/* signed mul was not right -- discovered by testing.
+			(int64_t)REG(rs1) * (int64_t)REG(rs2) does not use 64bit signed mul.
+	 	 */
+		value += (int64_t)(int32_t)REG(rs1) * (int64_t)(int32_t)REG(rs2);
 	if (flag){
 		FLAGS.Z = (value == 0ll);
 		FLAGS.N = (value < 0ll);
@@ -162,7 +168,7 @@ exec_long_mul(
 		printf("%s long multiply with add {r%d,r%d} = r%d * r%d + {r%d,r%d}, %supdate-flags\n",
 			unsign?"unsigned":"signed", rd_high, rd_low, rs1, rs2, rd_high, rd_low, flag?"":"no-");
 	else
-		printf("%s long multiply with add {r%d,r%d} = r%d * r%d, %supdate-flags\n",
+		printf("%s long multiply {r%d,r%d} = r%d * r%d, %supdate-flags\n",
 			unsign?"unsigned":"signed", rd_high, rd_low, rs1, rs2, flag?"":"no-");
 	return MULL_CYCLES;
 }
@@ -474,21 +480,21 @@ exec_half_ext_ld_st(
 	uint32_t immreg,
 	uint32_t addsub,
 	uint32_t prepost,
-	uint32_t bytehalf,
+	uint32_t halfbyte,
 	uint32_t signzero)
 {
 	if (!prepost) writeback = 1;
 	uint32_t offset = 0;
 	if (immreg){
 		printf("%s %s-extend %s data:r%d addr:r%d %s-%s offset: %d %swrite-back\n",
-			loadstore?"load":"store", signzero?"sign":"zero", bytehalf?"byte":"half",
+			loadstore?"load":"store", signzero?"sign":"zero", halfbyte?"half":"byte",
 			rdata, rbase, prepost?"pre":"post", addsub?"add":"sub", (imm5<<5)+roffset,
 			writeback?"":"no-");
 		offset = (imm5<<5)+roffset;
 	}
 	else{
 		printf("%s %s-extend %s data:r%d addr:r%d %s-%s offset: r%d %swrite-back\n",
-			loadstore?"load":"store", signzero?"sign":"zero", bytehalf?"byte":"half",
+			loadstore?"load":"store", signzero?"sign":"zero", halfbyte?"half":"byte",
 			rdata, rbase, prepost?"pre":"post", addsub?"add":"sub", roffset, writeback?"":"no-");
 		offset = REG(roffset);
 	}
@@ -497,13 +503,13 @@ exec_half_ext_ld_st(
 	mem_addr = prepost? wb_addr: REG(rbase);
 	if (loadstore){
 		uint32_t mem_word = cache_load(exec_cpu->cache, mem_addr, MEM_DATA, &latency);
-		if (bytehalf)
-			REG(rdata) = signzero? (int32_t)((int8_t)mem_word): (uint32_t)((uint8_t)mem_word);
-		else
+		if (halfbyte)
 			REG(rdata) = signzero? (int32_t)((int16_t)mem_word): (uint32_t)((uint16_t)mem_word);
+		else
+			REG(rdata) = signzero? (int32_t)((int8_t)mem_word): (uint32_t)((uint8_t)mem_word);
 	}else{
 		// QUESTION: How to deal with sign/zero extend?
-		cache_dstore(exec_cpu->cache, mem_addr, REG(rdata), bytehalf? MM_BYTE: MM_HALFWORD, &latency);
+		cache_dstore(exec_cpu->cache, mem_addr, REG(rdata), halfbyte? MM_HALFWORD: MM_BYTE, &latency);
 	}
 	if (writeback) REG(rbase) = wb_addr;
 	latency += ADDR_CALC_CYCLES;
@@ -602,7 +608,7 @@ exec_software_trap(
 	uint32_t trapno)
 {
 	printf("software trap 0x%x\n", trapno);
-	exec_cpu->reg[0] = syscall((syscall_num)trapno, exec_cpu);
+	exec_cpu->reg[0] = perform_syscall((syscall_num)trapno, exec_cpu);
 	exec_cpu->stats.nsyscall ++;
 	return SYSCALL_CYCLES;
 }
@@ -653,7 +659,7 @@ inst_dispatch(
 			else
 				latency = exec_half_ext_ld_st(i_ptr->rn, i_ptr->rm, i_ptr->rd, i_ptr->rs,
 					i_ptr->loadstore, i_ptr->writeback, i_ptr->byteword, i_ptr->addsub,
-					i_ptr->prepost, i_ptr->func & FUNC_BYTE_HALF, i_ptr->func & FUNC_SIGN_EXT);
+					i_ptr->prepost, i_ptr->func & FUNC_HALF_BYTE, i_ptr->func & FUNC_SIGN_EXT);
 			break;
 		}
 		case IMM_LDST:

@@ -14,7 +14,7 @@
 #define FUNC_NOT_ALU	8
 #define FUNC_SHIFT_MASK	6
 #define FUNC_SIGN_EXT	4
-#define FUNC_BYTE_HALF	2
+#define FUNC_HALF_BYTE	2
 #define FUNC_REG_IMM	1
 
 typedef enum {

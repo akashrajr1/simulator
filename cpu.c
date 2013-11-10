@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "inc/cpu.h"
@@ -44,6 +45,8 @@ cpu_exec(
 		cpu->stats.ncycle += cycles;
 		cpu->stats.ninst ++;
 	}
+	printf("return value: 0x%08x\n", cpu->reg[0]);
+	printf("instructions:%d; cycles:%d\n", cpu->stats.ninst, cpu->stats.ncycle);
 	return EXEC_FINISH;
 }
 

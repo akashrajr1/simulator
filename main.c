@@ -18,7 +18,7 @@ stack_allocate(mmu_t *mmu){
 
 int main(int argc, char *argv[])
 {
-	run_unit_tests();
+	// run_unit_tests();
 
 	printf("Hello! This is Unicore32 Simulator\n");
 	Elf *elfhdr;

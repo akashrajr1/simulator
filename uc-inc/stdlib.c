@@ -5,6 +5,7 @@ __attribute__ ((noinline, naked)) void _start(){
 	sys_exit(status);
 }
 
+/*
 int fprintln_hex(int fd, uint value){
 	static char buf[16];
 	int i = 0;
@@ -22,4 +23,4 @@ int fprintln_hex(int fd, uint value){
 	}
 	buf[i++] = '\0';
 	return sys_write(fd, buf, i);
-}
+}*/

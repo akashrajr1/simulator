@@ -172,8 +172,13 @@ test_cache()
 	printf("test_cache passed\n");
 }
 
-#define EXEC_INST(inst_val) do {\
+#define EXEC_INST_VAL(inst_val) do {\
 	*(uint32_t*)(&inst) = inst_val;\
+	cpu->reg[PC_NUM] += 4;\
+	cycles = inst_dispatch(cpu, inst);\
+} while(0)
+
+#define EXEC_INST() do {\
 	cpu->reg[PC_NUM] += 4;\
 	cycles = inst_dispatch(cpu, inst);\
 } while(0)
@@ -190,7 +195,7 @@ test_instruction(){
 	uint32_t pc = 0x2000000, sp = USER_STACK_TOP;
 	uint32_t *text = mmu_get_page(mmu, pc, 1);
 	assert(text != 0);
-	uint32_t *stack = mmu_get_page(mmu, sp, 1);
+	uint32_t *stack = mmu_get_page(mmu, sp-PGSIZE, 1);
 	assert(stack != 0);
 	uint32_t cycles;
 	general_inst inst;
@@ -201,23 +206,130 @@ test_instruction(){
 	cpu->reg[PC_NUM] = pc;
 	cpu->reg[SP_NUM] = sp;
 
+
 	{// sub	sp, sp, #4
-		EXEC_INST(0x24ef4004);
+		EXEC_INST_VAL(0x24ef4004);
 		assert(cpu->reg[PC_NUM] == 0x2000004);
 		assert(cpu->reg[SP_NUM] == USER_STACK_TOP-4);
 		assert(cpu->flags.N == 0 && cpu->flags.Z == 0 && cpu->flags.C == 0 && cpu->flags.V == 0);
 		printf("24ef4004 sub sp, sp, #4: %d[cycles]\n", cycles);
 	}
 	{// add	sp, sp, #4	; 0x4
-		EXEC_INST(0x28ef4004);
+		EXEC_INST_VAL(0x28ef4004);
 		assert(cpu->reg[PC_NUM] == 0x2000008);
 		// printf("sp:0x%x\n", cpu->reg[SP_NUM]);
 		assert(cpu->reg[SP_NUM] == USER_STACK_TOP);
 		assert(cpu->flags.N == 0 && cpu->flags.Z == 0 && cpu->flags.C == 0 && cpu->flags.V == 0);
 		printf("28ef4004 add sp, sp, #4: %d[cycles]\n", cycles);
 	}
+	{//add	r0, sp, #12
+		EXEC_INST_VAL(0x28e8000c);
+		assert(cpu->reg[PC_NUM] == 0x200000c);
+		assert(cpu->reg[0] == USER_STACK_TOP + 12);
+		assert(cpu->flags.N == 0 && cpu->flags.Z == 0 && cpu->flags.C == 0 && cpu->flags.V == 0);
+		printf("0x28e8000c add r0, sp, #12: %d[cycles]\n", cycles);
+	}
+	{//stw.w r0, [sp-], #4
+		EXEC_INST_VAL(0x72e80004);
+		assert(cpu->reg[SP_NUM] == USER_STACK_TOP - 4);
+		assert (cache_load(cache, USER_STACK_TOP - 4, MEM_DATA, NULL) == USER_STACK_TOP + 12);
+		printf("0x72e80004 stw.w r0, [sp-], #4: %d[cycles]\n", cycles);
+	}
+	{//0x79eac000 ldw r11, [sp+]
+		EXEC_INST_VAL(0x79eac000);
+		assert(cpu->reg[SP_NUM] == USER_STACK_TOP - 4);
+		assert(cpu->reg[11] == USER_STACK_TOP + 12);
+		printf("0x79eac000 ldw r11, [sp+]: %d[cycles]\n", cycles);
+	}
+	{// count leading zeroes/ones
+		*(uint32_t*)(&inst) = 0;
+		inst.id = REG_ALU;
+		inst.func = FUNC_MUL_BR_CNT;
+		inst.opcode = OP_BRANCH_CNT | OP_CNT; // cntlo count leading ones
+		inst.rd = 0;
+		inst.rm = 0;
+		cpu->reg[0] = ~0;
+		EXEC_INST();
+		assert(cpu->reg[0] == 32);
+		cpu->reg[0] = ~0 << 10;
+		EXEC_INST();
+		assert(cpu->reg[0] == 22);
+		cpu->reg[0] = 0;
+		EXEC_INST();
+		assert(cpu->reg[0] == 0);
+		printf("0x%08x cntlo r0, r0: %d[cycles]\n", *(uint32_t*)(&inst), cycles);
+		inst.opcode |= OP_CNT_ZERO; // count zeroes
+		cpu->reg[0] = ~0;
+		EXEC_INST();
+		assert(cpu->reg[0] == 0);
+		cpu->reg[0] = ~0u >> 10;
+		EXEC_INST();
+		assert(cpu->reg[0] == 10);
+		cpu->reg[0] = 0;
+		EXEC_INST();
+		assert(cpu->reg[0] == 32);
+		printf("0x%08x cntlz r0, r0: %d[cycles]\n", *(uint32_t*)(&inst), cycles);
+	}
+	{// jump link r24 / jump lr (ret)
+		cpu->reg[24] = pc;
+		uint32_t cur_pc = cpu->reg[PC_NUM] + 4;
+		EXEC_INST_VAL(0x11ffc138);
+		assert(cpu->reg[PC_NUM] == pc);
+		assert(cpu->reg[LR_NUM] == cur_pc);
+		printf("0x10ffc138 jump link r24: %d[cycles]\n", cycles);
+		EXEC_INST_VAL(0x10ffc13e);
+		assert(cpu->reg[PC_NUM] == cur_pc);
+		printf("0x10ffc13e jump  lr: %d[cycles]\n", cycles);
+	}
 	{
-		
+		inst.id = REG_ALU;
+		inst.func = FUNC_MUL_BR_CNT;
+		inst.opcode = 0;
+		inst.flag = 0;
+		inst.rd = 0;
+		inst.rn = 1;
+		inst.rm = 2;
+		cpu->reg[1] = 0xff38;
+		cpu->reg[2] = 0x12345;
+		EXEC_INST();
+		assert(cpu->reg[0] == 0x22617218);
+		assert(cpu->flags.N == 0 && cpu->flags.Z == 0);
+		inst.flag = 1;
+		cpu->reg[1] = 0xffff;
+		cpu->reg[2] = 0xffff;
+		EXEC_INST();
+		assert(cpu->reg[0] == 0xfffe0001);
+		assert(cpu->flags.N == 1 && cpu->flags.Z == 0);
+		cpu->reg[2] = 0x0;
+		EXEC_INST();
+		assert(cpu->reg[0] == 0);
+		assert(cpu->flags.N == 0 && cpu->flags.Z == 1);
+		inst.opcode |= OP_MUL_ADD;
+		inst.rs = 3;
+		cpu->reg[2] = 0x1;
+		cpu->reg[3] = 0xabcd;
+		EXEC_INST();
+		assert(cpu->reg[0] == 0xffff+0xabcd);
+		assert(cpu->flags.N == 0 && cpu->flags.Z == 0);
+		printf("mul works.\n");
+	}
+	{
+		inst.opcode |= OP_MUL_LONG | OP_MUL_UNSIGN;
+		// {r3, r0} += r1 * r2
+		cpu->reg[0] = 0x23456789;
+		cpu->reg[3] = 0xabcdef01;
+		cpu->reg[1] = 0x12345;
+		cpu->reg[2] = 0x6789a;
+		EXEC_INST();
+		assert(cpu->reg[0] == 0x801AF70B && cpu->reg[3] == 0xabcdef08);
+		assert(cpu->flags.N == 1 && cpu->flags.Z == 0);
+		inst.opcode -= OP_MUL_ADD + OP_MUL_UNSIGN;
+		cpu->reg[1] = -1;
+		// {r3, r0} = r1 * r2 64bit signed
+		EXEC_INST();
+		assert(cpu->reg[0] == 0xfff98766 && cpu->reg[3] == 0xffffffff);
+		assert(cpu->flags.N == 1 && cpu->flags.Z == 0);
+		printf("long mul works.\n");
 	}
 	printf("test_instruction completed.\n");
 }
@@ -237,11 +349,11 @@ run_unit_tests()
 		printf("run_unit_tests failed\n");
 		abort();
 	}
-	printf("skipped test_mmu\n");
+	printf("skipped test_mmu/test_cache\n");
 	if (0){
 		test_mmu();
+		test_cache();
 	}
-	test_cache();
 	test_instruction();
 	printf("all tests passed\n");
 	exit(0);

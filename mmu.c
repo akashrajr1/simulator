@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <assert.h>
 #include <time.h>
@@ -133,6 +134,8 @@ mmu_get_page(
 	if (*pte_ptr == NULL){	// pte doesn't exist, allocate a page
 		if (!alloc) goto mmu_get_page_end;
 		*pte_ptr = malloc(PGSIZE);
+		memset(*pte_ptr, 0, PGSIZE);
+		// printf("allocate page at va:0x%08x\n", va & ~(0xfff));
 		mmu->stats.npages ++;
 	}
 	pa = *pte_ptr;

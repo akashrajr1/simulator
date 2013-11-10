@@ -25,19 +25,20 @@ typedef int off_t;
 #define SYS_open		0x900005
 #define SYS_close		0x900006
 #define SYS_lseek		0x900013
+#define SYS_putint 		0x9000ff
 
 #define syscall1(num, name, ret_type, arg1_type, arg1_name) \
 static volatile __attribute__ ((noinline, naked)) ret_type\
  name(\
 arg1_type arg1_name){\
-	asm volatile ("jepriv #"#num ";jump ip;");}
+	asm volatile ("jepriv #"#num ";jump lr;");}
 
 #define syscall2(num, name, ret_type, arg1_type, arg1_name, arg2_type, arg2_name) \
 static volatile __attribute__ ((noinline, naked)) ret_type\
  name(\
 arg1_type arg1_name, \
 arg2_type arg2_name){\
-	asm volatile ("jepriv #"#num ";jump ip;");}
+	asm volatile ("jepriv #"#num ";jump lr;");}
 
 #define syscall3(num, name, ret_type, arg1_type, arg1_name, arg2_type, arg2_name, arg3_type, arg3_name) \
 static volatile __attribute__ ((noinline, naked)) ret_type\
@@ -45,7 +46,7 @@ static volatile __attribute__ ((noinline, naked)) ret_type\
 arg1_type arg1_name, \
 arg2_type arg2_name, \
 arg3_type arg3_name){\
- 	asm volatile ("jepriv #"#num ";jump ip");}
+ 	asm volatile ("jepriv #"#num ";jump lr");}
 
 // void exit(int status);
 syscall1(0x900001, sys_exit, int, int, status);
@@ -64,6 +65,9 @@ syscall1(0x900006, sys_close, int, int, fd);
 
 // off_t lseek(int fd, off_t offset, int whence);
 syscall3(0x900013, sys_lseek, off_t, int, fd, off_t, offset, int, whence);
+
+syscall1(0x9000ff, sys_putint, int, int, num);
+// void sys_putint(int num);
 
 extern int main();
 extern void _start();

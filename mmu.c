@@ -135,7 +135,7 @@ mmu_get_page(
 		if (!alloc) goto mmu_get_page_end;
 		*pte_ptr = malloc(PGSIZE);
 		memset(*pte_ptr, 0, PGSIZE);
-		// printf("allocate page at va:0x%08x\n", va & ~(0xfff));
+		// printf("allocate page at va:0x%08x -> %p\n", va & ~(0xfff), *pte_ptr);
 		mmu->stats.npages ++;
 	}
 	pa = *pte_ptr;

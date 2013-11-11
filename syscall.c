@@ -27,7 +27,7 @@ perform_syscall(
 	case SYS_lseek:
 		break;
 	case SYS_putint:
-		// printf("%d\n", REG(0));
+		printf("%d\n", REG(0));
 		break;
 	default:
 		error_process(NO_SYSCALL, num);

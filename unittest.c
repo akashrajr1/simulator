@@ -350,7 +350,7 @@ run_unit_tests()
 		abort();
 	}
 	printf("skipped test_mmu/test_cache\n");
-	if (0){
+	if (1){
 		test_mmu();
 		test_cache();
 	}

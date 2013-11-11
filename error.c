@@ -21,5 +21,6 @@ error_process(
 	 * should dump registers, stack trace, address mapping etc.
 	 * exit for now.
 	 */
+	assert(err != err);
 	longjmp(cpu_exec_buf, err);
 }

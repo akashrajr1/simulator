@@ -49,17 +49,18 @@ cache_load_line(
 	cache_set_t *cache_set = (type == MEM_INST)? cache->icache: cache->dcache;
 	cache_set += CACHE_INDEX(va);
 	int i;
+	uint32_t *cache_line = NULL;
+	// cache line not in use is put on the end of the queue
+	uint8_t old_order = 3;
 	latency = max(latency, cache->latency.read_hit);
 	for (i = 0; i < CACHE_SET_ASSOC; i++)
 		if (cache_set->valid[i] && cache_set->pa[i] == pa){
 			if (type == MEM_INST) cache->stats.i_hit ++;
 			else cache->stats.d_hit ++;
+			old_order = cache_set->order[i];
 			goto cache_load_lru;
 		}
-	// i-cache miss
-	uint32_t *cache_line = NULL;
-	// cache line not in use is put on the end of the queue
-	uint8_t old_order = 3;
+	// cache miss
 	if (type == MEM_INST) cache->stats.i_miss ++;
 	else cache->stats.d_miss ++;
 	for (i = 0; i < CACHE_SET_ASSOC; i++)
@@ -79,13 +80,14 @@ cache_load_line(
 		}
 		old_order = cache_set->order[i];
 		cache_line = cache_set->data[i];
-		if (cache_set->dirty[i]) // write-back on eviction
-			latency += mm_store(cache->mmu, pa + CACHE_ALIGN(va), cache_line);
+		if (cache_set->dirty[i]){ // write-back on eviction to the correct address!!
+			latency += mm_store(cache->mmu, cache_set->pa[i] + (CACHE_INDEX(va) << 5), cache_line);
+			cache_set->dirty[i] = 0;
+		}
 	}
 	cache_set->valid[i] = 1;
 	cache_set->pa[i] = pa;
 	latency += mm_load(cache->mmu, pa + CACHE_ALIGN(va), cache_line);
-	cache_set->dirty[i] = 0;
 cache_load_lru:
 	if (cache->eviction != CACHE_EVICT_LRU) goto cache_load_line_end;
 	int j;
@@ -94,7 +96,7 @@ cache_load_lru:
 		// VERY IMPORTANT: when a cache line is moved to the front of
 		// the queue (position stored in order), only lines before it
 		// move back by one. Don't modify those behind it.
-		if (cache_set->valid[j] && cache_set->order[j] < old_order)
+		if (i != j && cache_set->valid[j] && cache_set->order[j] < old_order)
 			cache_set->order[j] ++;
 cache_load_line_end:
 	if (latency_store != NULL) *latency_store = latency;
@@ -136,6 +138,8 @@ cache_dstore(
 		case MM_HALFWORD:
 			*((uint16_t*)word_ptr + ((va>>1) & 1)) = (uint16_t)value;
 	}
+	/*!!!! MARK THE CACHE LINE DIRTY!!!!*/
+	cache->dcache[CACHE_INDEX(va)].dirty[cache_line] = 1;
 	if (latency_store != NULL)
 		*latency_store = max(cache->latency.write_hit, latency);
 }

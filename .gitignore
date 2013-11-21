@@ -19,6 +19,6 @@
 
 # Hidden files
 .*
-
+*.out
 # Objdump files
 *.dump

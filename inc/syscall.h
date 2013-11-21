@@ -13,10 +13,11 @@
 #define SEEK_CUR	1
 #define SEEK_END	2
 
-#define SYSCALL_CYCLES	128
+#define SYSCALL_CYCLES	64
 
 #define SYSCALL_BASE	0x900000
 #define SYSCALL_MAX		0x900013
+
 
 typedef enum {
 	SYS_exit  = 0x900001,
@@ -25,7 +26,12 @@ typedef enum {
 	SYS_open  = 0x900005,
 	SYS_close = 0x900006,
 	SYS_lseek = 0x900013,
-	SYS_putint = 0x9000ff
+	SYS_div   =	0x9000f0,
+	SYS_udiv  = 0x9000f1,
+	SYS_mod   = 0x9000f2,
+	SYS_umod  = 0x9000f3,
+	SYS_putint 	= 0x9000f4,
+	SYS_putuint = 0x9000f5
 } syscall_num;
 
 extern uint32_t syscall_stats[];

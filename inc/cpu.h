@@ -19,7 +19,7 @@
 #define ADDR_CALC_CYCLES 	4
 
 #define USER_STACK_TOP	0x10000000
-#define USER_STACK_SIZE	20*PGSIZE
+#define USER_STACK_SIZE	4*PGSIZE
 
 /*
  * TODO: need a pipelined design.

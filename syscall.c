@@ -26,8 +26,23 @@ perform_syscall(
 		break;
 	case SYS_lseek:
 		break;
+	case SYS_div:
+		retval = (int)REG(0) / (int)REG(1);
+		break;
+	case SYS_udiv:
+		retval = (uint32_t)REG(0) / (uint32_t)REG(1);
+		break;
+	case SYS_mod:
+		retval = (int)REG(0) % (int)REG(1);
+		break;
+	case SYS_umod:
+		retval = (uint32_t)REG(0) % (uint32_t)REG(1);
+		break;
 	case SYS_putint:
 		printf("%d\n", REG(0));
+		break;
+	case SYS_putuint:
+		printf("%u\n", REG(0));
 		break;
 	default:
 		error_process(NO_SYSCALL, num);

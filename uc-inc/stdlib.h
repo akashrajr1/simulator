@@ -25,7 +25,12 @@ typedef int off_t;
 #define SYS_open		0x900005
 #define SYS_close		0x900006
 #define SYS_lseek		0x900013
-#define SYS_putint 		0x9000ff
+#define SYS_div 		0x9000f0
+#define SYS_udiv 		0x9000f1
+#define SYS_mod 		0x9000f2
+#define SYS_umod 		0x9000f3
+#define SYS_putint 		0x9000f4
+#define SYS_putuint 	0x9000f5
 
 #define syscall1(num, name, ret_type, arg1_type, arg1_name) \
 static volatile __attribute__ ((noinline, naked)) ret_type\
@@ -66,11 +71,33 @@ syscall1(0x900006, sys_close, int, int, fd);
 // off_t lseek(int fd, off_t offset, int whence);
 syscall3(0x900013, sys_lseek, off_t, int, fd, off_t, offset, int, whence);
 
-syscall1(0x9000ff, sys_putint, int, int, num);
+syscall2(0x9000f0, sys_div, int, int, a, int, b);
+syscall2(0x9000f1, sys_udiv, uint32_t, uint32_t, a, uint32_t, b);
+syscall2(0x9000f2, sys_mod, int, int, a, int, b);
+syscall2(0x9000f3, sys_umod, uint32_t, uint32_t, a, uint32_t, b);
+syscall1(0x9000f4, sys_putint, int, int, num);
+syscall1(0x9000f5, sys_putuint, int, uint32_t, num);
 // void sys_putint(int num);
 
 extern int main();
-extern void _start();
-extern int fprintln_hex(int fd, uint value);
+
+__attribute__ ((noinline, naked)) void
+_start(){
+	int status = main();
+	sys_exit(status);
+}
+
+inline volatile int __divsi3(int a, int b){
+	return sys_div(a, b);
+}
+inline volatile int __modsi3(int a, int b){
+	return sys_mod(a, b);
+}
+inline volatile uint32_t __udivsi3(uint32_t a, uint32_t b){
+	return sys_udiv(a, b);
+}
+inline volatile uint32_t __umodsi3(uint32_t a, uint32_t b){
+	return sys_umod(a, b);
+}
 
 #endif /*!_UC32_STDLIB_H*/

@@ -2,7 +2,7 @@
 #define LCG_MUL	214013
 #define LCG_INC	2531011
 
-#define LEN 1000
+#define LEN 100000
  
 void merge(int * list, int left_start, int left_end, int right_start, int right_end)
 {
@@ -92,7 +92,7 @@ int main()
 	}
  
 	mergesort(list, LEN);
-	print_list(list, LEN);
+	// print_list(list, LEN);
  
 	return 0;
 }

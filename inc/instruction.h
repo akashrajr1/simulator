@@ -47,51 +47,10 @@ typedef enum {
 	SOFT_TRAP = 7 
 } inst_ident;
 
-typedef enum {
-	LEFT = 0,
-	LOGIC_RIGHT,
-	ARITH_RIGHT,
-	ROTATE,
-	IMM_ROTATE,
-	LDST_LR, 
-	LDST_AR
-} shift_type;
 
 extern const char *shift_str[];
 
-typedef enum {
-	ALU_AND = 0,
-	ALU_XOR,
-	ALU_SUB,
-	ALU_RSUB,
-	ALU_ADD,
-	ALU_ADC,
-	ALU_SBC,
-	ALU_RSBC,
-	ALU_CMP_AND,
-	ALU_CMP_XOR,
-	ALU_CMP_SUB,
-	ALU_CMP_ADD,
-	ALU_OR,
-	ALU_COND_MOV,
-	ALU_AND_NOT,
-	ALU_COND_MVN
-} alu_opcode;
-
 extern const char *alu_op_str[];
-
-typedef uint32_t reg_num;
-
-struct _general_inst{
-	uint32_t rm:	5;
-	uint32_t func:	4;
-	uint32_t rs:	5;
-	uint32_t rd:	5;
-	uint32_t rn:	5;
-	uint32_t flag:	1;
-	uint32_t opcode:4;
-	uint32_t id:	3;
-};
 
 typedef struct{
 	uint32_t imm:	9;
@@ -154,6 +113,10 @@ typedef struct {
 	uint32_t opcode:	8;
 } soft_trap_inst;
 
-
+uint32_t exec_alu_compute(uint32_t value1, uint32_t value2, alu_opcode opcode);
+uint32_t exec_cnt_bits(uint32_t value, uint32_t zero_one);
+uint32_t exec_test_cond(cond_code cond);
+uint32_t exec_shift(uint32_t val, uint32_t s, shift_type shift, uint32_t *carry_ptr);
+void exec_update_flags(uint32_t res, uint32_t value1, uint32_t value2, uint32_t shift_c, alu_opcode opcode, flags_reg *flags);
 uint32_t inst_dispatch(cpu_t *cpu, general_inst inst);
 #endif /* !_UC32SIM_INSTRUCTION_H */

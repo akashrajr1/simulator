@@ -42,13 +42,14 @@ cache_load_line(
 	cache_t *cache,
 	uint32_t va,
 	mem_type type,
-	uint32_t *latency_store)
+	int32_t *latency_store)
 {
-	uint32_t latency = 0;
+	int32_t latency = 0;
+	int i = 0;
 	void *pa = mmu_paging(cache->mmu, va, type, &latency);
+	if (pa == NULL) goto cache_load_line_end;
 	cache_set_t *cache_set = (type == MEM_INST)? cache->icache: cache->dcache;
 	cache_set += CACHE_INDEX(va);
-	int i;
 	uint32_t *cache_line = NULL;
 	// cache line not in use is put on the end of the queue
 	uint8_t old_order = 3;
@@ -108,9 +109,10 @@ cache_load(
 	cache_t *cache,
 	uint32_t va,
 	mem_type type,
-	uint32_t *latency_store)
+	int32_t *latency_store)
 {
 	uint32_t cache_line = cache_load_line(cache, va, type, latency_store);
+	if (latency_store && *latency_store == -1) return 0;
 	if (type == MEM_INST)
 		return cache->icache[CACHE_INDEX(va)].data[cache_line][CACHE_OFFSET(va)];
 	else return cache->dcache[CACHE_INDEX(va)].data[cache_line][CACHE_OFFSET(va)];
@@ -122,10 +124,14 @@ cache_dstore(
 	uint32_t va,
 	uint32_t value,
 	mem_size size,
-	uint32_t *latency_store)
+	int32_t *latency_store)
 {
-	uint32_t latency = 0;
+	int32_t latency = 0;
 	uint32_t cache_line = cache_load_line(cache, va, MEM_DATA, &latency);
+	if (latency == -1){
+		if (latency_store != NULL) *latency_store = -1;
+		return;	
+	}
 	uint32_t *word_ptr = &(cache->dcache[CACHE_INDEX(va)].data[cache_line][CACHE_OFFSET(va)]);
 
 	switch (size){

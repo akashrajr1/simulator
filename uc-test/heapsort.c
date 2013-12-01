@@ -1,5 +1,5 @@
 #include "../uc-inc/stdlib.h"
-#define ARRAY_LEN 2000
+#define ARRAY_LEN 100000
 #define ValType int
 #define LCG_MUL 214013
 #define LCG_INC 2531011
@@ -52,6 +52,6 @@ int main()
         rdnum = rdnum * LCG_MUL + LCG_INC;
     }
     heapsort(array, ARRAY_LEN);
-    for (ix=0; ix<ARRAY_LEN; ix++) sys_putint(array[ix]);
+    // for (ix=0; ix<ARRAY_LEN; ix++) sys_putint(array[ix]);
     return 0;
 }

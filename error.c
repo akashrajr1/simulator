@@ -11,6 +11,9 @@ const char *error_names[] = {
 	[NO_SYSCALL] = "System call error"
 };
 
+static simulator_error err_id;
+static uint32_t err_code;
+
 void
 error_process(
 	simulator_error err,
@@ -23,4 +26,17 @@ error_process(
 	 */
 	assert(err != err);
 	longjmp(cpu_exec_buf, err);
+}
+void
+core_dump(
+	cpu_t *cpu)
+{
+	printf("core cump:%s 0x%08x\n", error_names[err_id], err_code);	
+	assert(cpu != cpu);
+}
+
+void error_log(simulator_error err, uint32_t code){
+	err_id = err;
+	err_code = code;
+	assert(err != err);
 }

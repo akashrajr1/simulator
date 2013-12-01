@@ -113,7 +113,7 @@ void mmu_destroy(mmu_t *mmu);
  *
  * the simulator also use mmu_get_page to allocate pages.
  */
-void *mmu_paging(mmu_t *mmu, uint32_t va, mem_type type, uint32_t *latency_store);
+void *mmu_paging(mmu_t *mmu, uint32_t va, mem_type type, int32_t *latency_store);
 void *mmu_get_page(mmu_t *mmu, uint32_t va, int alloc);
 /* 
  * functions for the cache module 

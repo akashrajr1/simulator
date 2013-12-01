@@ -62,7 +62,7 @@ test_mmu()
 	assert(mmu->stats.npages == NPDENTRIES*NPTENTRIES);
 	// test tlb
 	assert(NDTLB == NITLB);
-	uint32_t latency1[NDTLB], latency2[NDTLB];
+	int32_t latency1[NDTLB], latency2[NDTLB];
 	va = 0x2000000;
 	for (i = 0; i < NDTLB; i++)
 		pa = mmu_paging(mmu, va + PGSIZE * i, MEM_DATA, latency1+i);
@@ -119,7 +119,7 @@ test_cache()
 	pa = mmu_get_page(mmu, va, 0);
 	printf("16 pages (64KB, 0x%08x-0x%08x) for the cache to play with.\n",
 		va, va + 16 * PGSIZE - 1);
-	uint32_t latency = 0, tmp, words = 16 * PGSIZE / 4;
+	int32_t latency = 0, tmp, words = 16 * PGSIZE / 4;
 	for (i = 0; i < words; i++)
 		cache_dstore(cache, va + i*4, i&0x3ff, MM_WORD, NULL);
 	printf("mem. init. using cache data store [word].\n");
@@ -331,6 +331,21 @@ test_instruction(){
 		assert(cpu->flags.N == 1 && cpu->flags.Z == 0);
 		printf("long mul works.\n");
 	}
+	{
+		*(uint32_t*)(&inst) = 0;
+		cpu->flags.C = 1;
+		cpu->reg[1] = cpu->reg[0] = 0xffffffff;
+		inst.id = REG_ALU;
+		inst.opcode = ALU_ADC;
+		inst.rd = 0;
+		inst.rn = 0;
+		inst.rm = 1;
+		inst.rs = 0;
+		EXEC_INST();
+		assert(cpu->reg[0] == 0xffffffff);
+		assert(cpu->flags.C == 1);
+		printf("ADC works\n");
+	}
 	printf("test_instruction completed.\n");
 }
 
@@ -350,7 +365,7 @@ run_unit_tests()
 		abort();
 	}
 	printf("skipped test_mmu/test_cache\n");
-	if (1){
+	if (0){
 		test_mmu();
 		test_cache();
 	}

@@ -62,7 +62,7 @@ mmu_paging(
 	mmu_t *mmu,
 	uint32_t va,
 	mem_type type,
-	uint32_t *latency_store)
+	int32_t *latency_store)
 {
 	tlb_t *tlb = NULL;
 	uint32_t ntlb = 0;
@@ -74,7 +74,7 @@ mmu_paging(
 		ntlb = NDTLB;
 	}
 	int i;
-	uint32_t latency = (type == MEM_INST)?
+	int32_t latency = (type == MEM_INST)?
 		mmu->latency.itlb_hit: mmu->latency.dtlb_hit;
 	void *pa = NULL;
 	uint32_t vpn = PGNUM(va);
@@ -90,8 +90,11 @@ mmu_paging(
 	else mmu->stats.ndtlb_miss ++;
 	latency += mmu->latency.paging;
 	pa = mmu_get_page(mmu, va, 0);
-	if (pa == NULL) // page fault!
-		error_process(ADDR_INVAL, va);
+	if (pa == NULL){ // page fault!
+		error_log(ADDR_INVAL, va);
+		latency = -1;
+		goto mmu_paging_end;
+	}
 	for (i = 0; i < ntlb; i++)
 		if (tlb[i].valid == 0){
 			tlb[i].vpn = vpn;

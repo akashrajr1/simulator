@@ -34,7 +34,7 @@ int A(ARG* a)
 int main(int argc, char **argv)
 {
   int i, k;
-  for (i = 0; i <= 20; i++){
+  for (i = 0; i <= 10; i++){
   	k = i;
   	sys_putint(A(FUN(MAKE_ARG(f1), MAKE_ARG(f_1), MAKE_ARG(f_1),
                        MAKE_ARG(f1), MAKE_ARG(f0))));

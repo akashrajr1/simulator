@@ -1,12 +1,13 @@
 #include <stdint.h>
-volatile uint64_t fx(){
+#include "../uc-inc/stdlib.h"
+__attribute__ ((noinline)) volatile uint64_t fx(){
 	return  256ll;
 }
-volatile uint64_t fy(){
+__attribute__ ((noinline)) volatile uint64_t fy(){
 	return  128ll;
 }
-int main(){
-	volatile uint64_t x = fx(), y = fy();
-	volatile uint64_t z = x + y;
+__attribute__ ((noinline)) int main(){
+	uint64_t x = fx(), y = fy();
+	uint64_t z = x + y;
 	return (z == 384);
 }

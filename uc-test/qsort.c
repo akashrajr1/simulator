@@ -1,7 +1,7 @@
 #include "../uc-inc/stdlib.h"
 #define LCG_MUL	214013
 #define LCG_INC	2531011
-#define LEN 2000
+#define LEN 100000
 int array[LEN];
 
 inline void swap(int arr[], int i, int j) {
@@ -38,12 +38,12 @@ int main(){
 	uint32_t num;
 	for (i = 0, num = 0; i < LEN; i++){
 		array[i] = num;
-		sys_putint(array[i]);
+		// sys_putint(array[i]);
 		num = num * LCG_MUL + LCG_INC;
 	}
 	quicksort(array, 0, LEN-1);
 	for (i = 0; i < LEN; i++){
-		sys_putint(array[i]);
+		// sys_putint(array[i]);
 	}
 	return 0;
 }

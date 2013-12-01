@@ -8,8 +8,6 @@
 #define REG(num) exec_cpu->reg[num]
 #define FLAGS 	exec_cpu->flags
 
-static cpu_t *exec_cpu = NULL;
-
 const char *shift_str[] = {
 	"<<",
 	"l>>",
@@ -85,13 +83,11 @@ exec_branch(
 	return BR_TAKEN_CYCLES;
 }
 
-static uint32_t
+uint32_t
 exec_cnt_bits(
-	reg_num rd,
-	reg_num rs,
+	uint32_t value,
 	uint32_t zero_one)
 {
-	uint32_t value = REG(rs);
 	uint32_t bit_cnt = 0;
 	if (zero_one){
 		if (value>>16 == 0) {bit_cnt += 16; value <<= 16;}
@@ -108,8 +104,7 @@ exec_cnt_bits(
 		if (value>>31 == 0x1) {bit_cnt++; if (value == 0xC0000000) bit_cnt++;}
 		printf("count leading ones r%d <- r%d\n", rd, rs);
 	}
-	REG(rd) = bit_cnt;
-	return CNTL_CYCLES;
+	return bit_cnt;
 }
 
 static uint32_t
@@ -173,7 +168,7 @@ exec_long_mul(
 	return MULL_CYCLES;
 }
 
-static uint32_t
+uint32_t
 exec_test_cond(
 	cond_code cond)
 {
@@ -213,14 +208,14 @@ exec_test_cond(
 	}
 }
 
-static uint32_t
+uint32_t
 exec_shift(
 	uint32_t val,
 	uint32_t s,
 	shift_type shift,
 	uint32_t *carry_ptr)
 {
-	uint32_t carry = FLAGS.C;
+	uint32_t carry = 0;
 	switch (shift){
 	case LEFT:
 		if (s) carry = ((val & (1<<(32-s))) != 0);
@@ -269,7 +264,7 @@ exec_shift(
 	return val;
 }
 
-static uint32_t
+uint32_t
 exec_alu_compute(
 	uint32_t value1,
 	uint32_t value2,
@@ -309,40 +304,41 @@ exec_alu_compute(
 	return res;
 }
 
-static void
+void
 exec_update_flags(
 	uint32_t res,
 	uint32_t value1,
 	uint32_t value2,
 	uint32_t shift_c,
-	alu_opcode opcode)
+	alu_opcode opcode,
+	flags_reg *flags)
 {
-	FLAGS.N = ((int32_t)res < 0);
-	FLAGS.Z = (res == 0);
+	flags->N = ((int32_t)res < 0);
+	flags->Z = (res == 0);
 	// borrow = ~carry? Sub-Carry is actually Sub-Borrow?
 	switch (opcode){
 	case ALU_SUB:
 	case ALU_SBC:
 	case ALU_CMP_SUB:
-		FLAGS.V = ((((value1^value2)>>31) != 0) && (((res^value2)>>31) == 0));
-		res -= (opcode == ALU_SBC)? FLAGS.C: 1;
-		FLAGS.C = (res < value1 || res < (~value2));
+		flags->V = ((((value1^value2)>>31) != 0) && (((res^value2)>>31) == 0));
+		res -= (opcode == ALU_SBC)? flags->C: 1;
+		flags->C = (res < value1 || res < (~value2));
 		break;
 	case ALU_RSUB:
 	case ALU_RSBC:
-		FLAGS.V = ((((value1^value2)>>31) != 0) && (((res^value1)>>31) == 0));
-		res -= (opcode == ALU_RSBC)? FLAGS.C: 1;
-		FLAGS.C = (res < (~value1) || res < value2);
+		flags->V = ((((value1^value2)>>31) != 0) && (((res^value1)>>31) == 0));
+		res -= (opcode == ALU_RSBC)? flags->C: 1;
+		flags->C = (res < (~value1) || res < value2);
 		break;
 	case ALU_ADD:
 	case ALU_ADC:
 	case ALU_CMP_ADD:
-		FLAGS.V = ((((value1^value2)>>31) == 0) && (((res^value1)>>31) != 0));
-		if (opcode == ALU_ADC) res -= FLAGS.C;
-		FLAGS.C = (res < value1 || res < value2);
+		flags->V = ((((value1^value2)>>31) == 0) && (((res^value1)>>31) != 0));
+		if (opcode == ALU_ADC) res -= flags->C;
+		flags->C = (res < value1 || res < value2);
 		break;
 	default:
-		FLAGS.C = shift_c;
+		flags->C = shift_c;
 		break;
 	}
 }
@@ -359,7 +355,7 @@ exec_alu_reg_imm(
 	uint32_t flag)
 {
 	uint32_t write_res = 0;
-	uint32_t latency = 0;
+	int32_t latency = 0;
 	if (opcode < ALU_CMP_AND || opcode == ALU_OR || opcode == ALU_AND_NOT){
 		write_res = 1;
 		latency = ALU_CYCLES;
@@ -385,7 +381,7 @@ exec_alu_reg_imm(
 	uint32_t value1 = REG(rs1), shift_c;
 	uint32_t value2 = exec_shift(REG(rs2), regimm? REG(ss): ss, shift, &shift_c);
 	uint32_t res = exec_alu_compute(value1, value2, opcode);
-	if (flag) exec_update_flags(res, value1, value2, shift_c, opcode);
+	if (flag) exec_update_flags(res, value1, value2, shift_c, opcode, &FLAGS);
 	if (write_res) REG(rd) = res;
 exec_alu_reg_imm_end:
 	return latency;
@@ -401,7 +397,7 @@ exec_alu_imm_rotate(
 	uint32_t flag)
 {
 	uint32_t write_res = 0;
-	uint32_t latency = 0;
+	int32_t latency = 0;
 	if (opcode < ALU_CMP_AND || opcode == ALU_OR || opcode == ALU_AND_NOT){
 		write_res = 1;
 		latency = ALU_CYCLES;
@@ -427,7 +423,7 @@ exec_alu_imm_rotate(
 	uint32_t value1 = REG(rs), shift_c;
 	uint32_t value2 = exec_shift(imm9, rotate, IMM_ROTATE, &shift_c);
 	uint32_t res = exec_alu_compute(value1, value2, opcode);
-	if (flag) exec_update_flags(res, value1, value2, shift_c, opcode);
+	if (flag) exec_update_flags(res, value1, value2, shift_c, opcode, &FLAGS);
 	if (write_res) REG(rd) = res;
 exec_alu_imm_rotate_end:
 	return latency;
@@ -454,7 +450,8 @@ exec_reg_shift_ld_st(
 	if (shift == LOGIC_RIGHT) shift = LDST_LR;
 	if (shift == ARITH_RIGHT) shift = LDST_AR;
 	uint32_t offset = exec_shift(REG(rindex), imm5, shift, NULL);
-	uint32_t mem_addr, wb_addr, latency;
+	uint32_t mem_addr, wb_addr;
+	int32_t latency;
 	wb_addr = (addsub? offset: -offset) + REG(rbase);
 	mem_addr = prepost? wb_addr: REG(rbase);
 	if (loadstore){
@@ -498,7 +495,8 @@ exec_half_ext_ld_st(
 			rdata, rbase, prepost?"pre":"post", addsub?"add":"sub", roffset, writeback?"":"no-");
 		offset = REG(roffset);
 	}
-	uint32_t mem_addr = 0, wb_addr = 0, latency;
+	uint32_t mem_addr = 0, wb_addr = 0;
+	int32_t latency;
 	wb_addr = (addsub? offset: -offset) + REG(rbase);
 	mem_addr = prepost? wb_addr: REG(rbase);
 	if (loadstore){
@@ -531,7 +529,8 @@ exec_imm_ld_st(
 	printf("%s data:r%d addr:r%d %s-%s offset:%d %swrite-back\n",
 		loadstore?"load":"store", rdata, rbase, prepost?"pre":"post",
 		addsub?"add":"sub", imm14, writeback?"":"no-");
-	uint32_t mem_addr = 0, wb_addr = 0, latency;
+	uint32_t mem_addr = 0, wb_addr = 0;
+	int32_t latency;
 	wb_addr = (addsub? imm14: -imm14) + REG(rbase);
 	mem_addr = prepost? wb_addr: REG(rbase);
 	if (loadstore){
@@ -568,11 +567,12 @@ exec_multi_ld_st(
 	printf("multiple %s list:%08x addr:r%d %s-%s %swrite-back\n",
 		loadstore?"load":"store", reglist, rbase, prepost?"pre":"post",
 		addsub?"add":"sub", writeback?"":"no-");
-	uint32_t nregs = bitcount(reglist), i = 0, latency = ADDR_CALC_CYCLES;
+	uint32_t nregs = bitcount(reglist), i = 0;
+	int32_t latency = ADDR_CALC_CYCLES;
 	uint32_t mem_addr = REG(rbase) + (addsub? 0: -4 * nregs);
 	while (reglist){
 		if (reglist & 1){
-			uint32_t tmp;
+			int32_t tmp;
 			if (prepost == addsub) mem_addr += 4;
 			REG(i) = cache_load(exec_cpu->cache, mem_addr, MEM_DATA, &tmp);
 			if (prepost != addsub) mem_addr += 4;
@@ -619,7 +619,7 @@ inst_dispatch(
 	general_inst inst)
 {
 	exec_cpu = cpu;
-	uint32_t latency = 0;
+	int32_t latency = 0;
 	switch ((inst_ident)inst.id){
 		case REG_ALU:
 			if ((inst.func & FUNC_NOT_ALU) == 0){
@@ -628,8 +628,10 @@ inst_dispatch(
 			}
 			else if (inst.func == FUNC_MUL_BR_CNT){
 				if (inst.opcode & OP_BRANCH_CNT){
-					if (inst.opcode & OP_CNT)
-						latency = exec_cnt_bits(inst.rd, inst.rm, inst.opcode & OP_CNT_ZERO);
+					if (inst.opcode & OP_CNT){
+						REG(inst.rd) = exec_cnt_bits(REG(inst.rm), inst.opcode & OP_CNT_ZERO);
+						latency = CNTL_CYCLES;
+					}
 					else latency = exec_branch(inst.rm, inst.flag);
 				}
 				else if (inst.opcode & OP_MUL_LONG)

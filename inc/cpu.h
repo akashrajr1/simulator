@@ -23,13 +23,27 @@
 
 #define MULTIPLY 8
 
-/*
- * TODO: need a pipelined design.
- */
+typedef enum {
+	BUBBLE = 0,
+	ALU_REG_SHIFT,
+	ALU_IMM_SHIFT,
+	CNT_BITS,
+	JUMP,
+	MUL32,
+	MUL64,
+	ALU_IMM_ROTATE,
+	LDST_REG,
+	LDST_HALFSIGN,
+	LDST_IMM,
+	BRANCH,
+	JEPRIV,
+	NINST_TYPE
+}inst_type;
 
 typedef struct {
 	// nop if do_write = 0
 	general_inst inst;
+	inst_type type;
 	uint32_t pc;
 	flags_reg flags;
 	// load/alu register (and address writeback)
@@ -71,15 +85,15 @@ typedef struct {
 	// pipe_idex_t idex;
 } pipe_ifid_t;
 
-/*
- * TODO: extend this to make detailed instruction counts.
- */
 typedef struct {
 	uint32_t	ncycle;
-	uint32_t	nstall_data;
-	uint32_t	nstall_ctrl;
-	uint32_t	ninst;
+	uint32_t	nforward;
+	uint32_t	nload_use;
+	uint32_t	nctrl1;
+	uint32_t	nctrl2;
+	// uint32_t	ninst;
 	uint32_t 	nsyscall;
+	uint32_t	ninst[NINST_TYPE];
 } cpu_stats;
 
 typedef uint32_t reg_t;

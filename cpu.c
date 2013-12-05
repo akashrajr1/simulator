@@ -29,6 +29,12 @@ cpu_init(
 	return cpu;
 }
 
+static char *inst_desc[] = {
+	"bubble", "alu(reg-shift)", "alu(imm-shift)", "count-bits", "jump", "multiply(32)", "multiply(64)",
+	"alu(imm-rotate)", "load/store(reg-offset)", "load/store(half-sign)", "load/store(imm-offset)",
+	"branch", "syscall"
+};
+
 exec_result
 cpu_exec(
 	cpu_t *cpu,
@@ -48,6 +54,12 @@ cpu_exec(
 		printf("\n");
 		for (i = 16; i < 31; i++) printf("%08x ", REG(i));
 		printf("%08x \n", MMWB.pc);
+
+		printf("cycles:%d\nforwards:%d\nuse-after-load:%d\nbranch-stall1:%d\nbranch-stall12:%d\nsystem-calls:%d\n\n",
+			exec_cpu->stats.ncycle, exec_cpu->stats.nforward, exec_cpu->stats.nload_use, exec_cpu->stats.nctrl1,
+			exec_cpu->stats.nctrl2, exec_cpu->stats.nsyscall);
+		for (i = 0; i < NINST_TYPE; i++)
+			printf("%s:%d\n", inst_desc[i], exec_cpu->stats.ninst[i]);
 		// caused by non-local jump from error_process
 		return cpu->exec_finished? EXEC_FINISH: EXEC_ABORT;
 	}
@@ -66,13 +78,14 @@ cpu_exec(
 		cpu->stats.ncycle += cycles;
 		cpu->stats.ninst ++;
 	}*/
-		
-		while (1){
-			cpu_pipe_if();
-			if (exec_cpu->fault) exec_cpu->fault++;
-		}
-	printf("return value: 0x%08x\n", cpu->reg[0]);
-	printf("instructions:%d; cycles:%d\n", cpu->stats.ninst, cpu->stats.ncycle);
+	
+	while (1){
+		cpu_pipe_if();
+		if (exec_cpu->fault) exec_cpu->fault++;
+		exec_cpu->stats.ncycle ++;
+	}
+	// printf("return value: 0x%08x\n", cpu->reg[0]);
+	// printf("instructions:%d; cycles:%d\n", cpu->stats.ninst, cpu->stats.ncycle);
 	return EXEC_FINISH;
 }
 
@@ -82,18 +95,27 @@ get_reg(reg_num r)
 	if (r == PC_NUM) return IFID.pc + 4;
 	uint32_t value = REG(r);
 	// bypass result from MM
-	if (r == MMWB.rd1 && (MMWB.do_write & 1))
+	if (r == MMWB.rd1 && (MMWB.do_write & 1)){
+		exec_cpu->stats.nforward ++;
 		value = MMWB.val1;
-	else if (r == MMWB.rd2 && (MMWB.do_write & 2))
+	}
+	else if (r == MMWB.rd2 && (MMWB.do_write & 2)){
+		exec_cpu->stats.nforward ++;
 		value = MMWB.val2;
+	}
 
 	// bypass result from EX
 	if (r == EXMM.to_wb.rd1 && (EXMM.to_wb.do_write & 1)){
 		if (EXMM.do_mem) exec_cpu->load_use = 1; // use after load harzard
-		value = EXMM.to_wb.val1;
+		else {
+			value = EXMM.to_wb.val1;
+			exec_cpu->stats.nforward ++;
+		}
 	}
-	else if (r == EXMM.to_wb.rd2 && (EXMM.to_wb.do_write & 2))
+	else if (r == EXMM.to_wb.rd2 && (EXMM.to_wb.do_write & 2)){
 		value = EXMM.to_wb.val2;
+		exec_cpu->stats.nforward ++;
+	}
 	return value;
 }
 
@@ -114,7 +136,6 @@ cpu_pipe_if(){
 	}
 	if (exec_cpu->fault >= 1) return;
 	int32_t latency = 0;
-	// TODO update PC
 	*(uint32_t *)(&(IFID.inst)) = cache_load(exec_cpu->cache, REG(PC_NUM), MEM_INST, &latency);
 	IFID.pc = REG(PC_NUM);
 	IFID.nop = 0;
@@ -140,6 +161,7 @@ cpu_pipe_id(){
 					IDEX.val1 = get_reg(inst.rn);
 				IDEX.val2 = get_reg(inst.rm);
 				IDEX.sa = (inst.func & FUNC_REG_IMM)? get_reg(inst.rs): inst.rs;
+				IDEX.to_mm.to_wb.type = (inst.func & FUNC_REG_IMM)? ALU_REG_SHIFT: ALU_IMM_SHIFT;
 				IDEX.shift = FUNC_GET_SHIFT(inst.func);
 				IDEX.opcode = inst.opcode;
 				IDEX.to_mm.to_wb.rd1 = inst.rd;
@@ -153,8 +175,9 @@ cpu_pipe_id(){
 						IDEX.to_mm.to_wb.rd1 = inst.rd;
 						IDEX.to_mm.to_wb.do_write = 1;
 						IDEX.opcode = inst.opcode;
+						IDEX.to_mm.to_wb.type = CNT_BITS;
 					}else{
-						// TODO is this correct?
+						// is this correct? seems to be...
 						exec_cpu->new_pc = get_reg(inst.rm);
 						if (!exec_cpu->load_use){
 							exec_cpu->use_new_pc = 1;
@@ -163,7 +186,9 @@ cpu_pipe_id(){
 								IDEX.to_mm.to_wb.val1 = REG(PC_NUM);
 								IDEX.to_mm.to_wb.do_write = 1;
 							}
+							exec_cpu->stats.nctrl1 ++;
 						}
+						IDEX.to_mm.to_wb.type = JUMP;
 					}
 				}
 				else if (inst.opcode & OP_MUL_LONG){
@@ -176,6 +201,7 @@ cpu_pipe_id(){
 					IDEX.to_mm.to_wb.rd1 = inst.rd;
 					IDEX.to_mm.to_wb.rd2 = inst.rs;
 					IDEX.to_mm.to_wb.do_write = 3;
+					IDEX.to_mm.to_wb.type = MUL64;
 				}
 				else{
 					IDEX.mul = MULTIPLY | inst.opcode;
@@ -185,6 +211,7 @@ cpu_pipe_id(){
 					IDEX.flag = inst.flag;
 					IDEX.to_mm.to_wb.rd1 = inst.rd;
 					IDEX.to_mm.to_wb.do_write = 1;
+					IDEX.to_mm.to_wb.type = MUL32;
 				}
 			}
 			else{
@@ -206,6 +233,7 @@ cpu_pipe_id(){
 			IDEX.flag = i_ptr->flag;
 			IDEX.to_mm.to_wb.rd1 = i_ptr->rd;
 			IDEX.to_mm.to_wb.do_write = 1;
+			IDEX.to_mm.to_wb.type = ALU_IMM_ROTATE;
 			break;
 		}
 		case REG_LDST:
@@ -230,6 +258,7 @@ cpu_pipe_id(){
 				IDEX.to_mm.to_wb.rd2 = i_ptr->rn;
 				if (! i_ptr->prepost) i_ptr->writeback = 1;
 				IDEX.to_mm.to_wb.do_write = (i_ptr->loadstore? 1: 0) | (i_ptr->writeback? 2: 0);
+				IDEX.to_mm.to_wb.type = LDST_REG;
 			}else{
 				IDEX.val1 = get_reg(i_ptr->rn);
 				IDEX.val2 = i_ptr->byteword? (i_ptr->rs << 5) + i_ptr->rm: get_reg(i_ptr->rm);
@@ -249,6 +278,7 @@ cpu_pipe_id(){
 				IDEX.to_mm.to_wb.rd2 = i_ptr->rn;
 				if (! i_ptr->prepost) i_ptr->writeback = 1;
 				IDEX.to_mm.to_wb.do_write = (i_ptr->loadstore? 1: 0) | (i_ptr->writeback? 2: 0);
+				IDEX.to_mm.to_wb.type = LDST_HALFSIGN;
 			}
 			break;
 		}
@@ -273,6 +303,7 @@ cpu_pipe_id(){
 			IDEX.to_mm.to_wb.rd2 = i_ptr->rn;
 			if (! i_ptr->prepost) i_ptr->writeback = 1;
 			IDEX.to_mm.to_wb.do_write = (i_ptr->loadstore? 1: 0) | (i_ptr->writeback? 2: 0);
+			IDEX.to_mm.to_wb.type = LDST_IMM;
 			break;
 		}
 		case COND_BRANCH:
@@ -291,6 +322,8 @@ cpu_pipe_id(){
 				IDEX.to_mm.to_wb.rd1 = LR_NUM;
 				IDEX.to_mm.to_wb.do_write = 1;
 			}
+			exec_cpu->stats.nctrl2 ++;
+			IDEX.to_mm.to_wb.type = BRANCH;
 			// latency = exec_cond_branch(i_ptr->cond, i_ptr->offset, i_ptr->link);
 			break;
 		}
@@ -301,6 +334,7 @@ cpu_pipe_id(){
 			else REG(0) = perform_syscall((syscall_num)i_ptr->trapno, exec_cpu);
 			exec_cpu->fault = 2;
 			exec_cpu->in_syscall = 1;
+			IDEX.to_mm.to_wb.type = JEPRIV;
 			break;
 		}
 		default:
@@ -309,6 +343,7 @@ cpu_pipe_id(){
 			break;
 	}
 	if (exec_cpu->load_use){ // use after load harzard
+		exec_cpu->stats.nload_use ++;
 		memset(&IDEX, 0, sizeof(pipe_idex_t)); // buble in EX stage
 	}
 }
@@ -319,7 +354,6 @@ cpu_pipe_ex(){
 	cpu_pipe_mm();
 	EXMM = IDEX.to_mm;
 	if (exec_cpu->fault >= 3) return;
-	// TODO flags
 	if (IDEX.mul & MULTIPLY){
 		if (IDEX.mul & OP_MUL_LONG){
 			uint64_t value = (IDEX.mul & OP_MUL_ADD)? ((uint64_t)IDEX.addhi<<32) + IDEX.sa:0ull;
@@ -411,11 +445,13 @@ cpu_pipe_mm(){
 
 void
 cpu_pipe_wb(){
+	exec_cpu->stats.ninst[MMWB.type] ++;
 	if (exec_cpu->fault == 5){
 		if (exec_cpu->exec_finished) longjmp(cpu_exec_buf, 100);
 		if (exec_cpu->in_syscall){
 			exec_cpu->in_syscall = 0;
 			exec_cpu->fault = 0;
+			exec_cpu->stats.nsyscall ++;
 		}else core_dump(exec_cpu); // should not return
 	}
 	if (MMWB.do_write & 1) REG(MMWB.rd1) = MMWB.val1;

@@ -9,8 +9,7 @@ typedef enum{
 
 extern const char *error_names[];
 /*
- * process an (fatal) error.
- * TODO: long jump to cpu module.
+ * process a (fatal) error.
  */
 void error_process(simulator_error err, uint32_t code);
 void error_log(simulator_error err, uint32_t code);

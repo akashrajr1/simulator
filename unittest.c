@@ -26,7 +26,7 @@ test_mmu()
 	// test page translation
 	assert((pa = mmu_get_page(mmu, va, 1)) != NULL);
 	assert(mmu_get_page(mmu, va, 0) == pa);
-	printf("mmu adress translation: 0x%08x[va] -> 0x%lx[pa]\n", va, (unsigned long)pa);
+	printf("mmu adress translation: 0x%08x[va] -> %p[pa]\n", va, pa);
 	assert(mmu_get_page(mmu, va + PGSIZE - 1, 0) == pa);
 	assert(mmu_get_page(mmu, va + PGSIZE, 0) == NULL);
 	// test load/store
@@ -149,9 +149,8 @@ test_cache()
 		uint8_t buf[4];
 		*(uint32_t*)buf = cache_load(cache, va+i, MEM_DATA, NULL);
 		assert((i&0xff) == buf[i&0x3]);
-		// TODO later, test for consistent icache
-		// *(uint32_t*)buf = cache_load(cache, va+i, MEM_INST, NULL);
-		// assert((i&0xff) == buf[i&0x3]);
+		*(uint32_t*)buf = cache_load(cache, va+i, MEM_INST, NULL);
+		assert((i&0xff) == buf[i&0x3]);
 	}
 	printf("  passed\n");
 	printf("testing halfword store/load...");

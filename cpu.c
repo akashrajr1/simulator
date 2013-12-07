@@ -7,6 +7,7 @@
 #include "inc/syscall.h"
 #include "inc/instruction.h"
 #include "inc/cache.h"
+#include "inc/mmu.h"
 #define REG(num) (exec_cpu->reg[num])
 #define FLAGS 	(exec_cpu->flags)
 #define IFID  	(exec_cpu->ifid)
@@ -30,7 +31,7 @@ cpu_init(
 }
 
 static char *inst_desc[] = {
-	"bubble", "alu(reg-shift)", "alu(imm-shift)", "count-bits", "jump", "multiply(32)", "multiply(64)",
+	"harzard-bubble", "alu(reg-shift)", "alu(imm-shift)", "count-bits", "jump", "multiply(32)", "multiply(64)",
 	"alu(imm-rotate)", "load/store(reg-offset)", "load/store(half-sign)", "load/store(imm-offset)",
 	"branch", "syscall"
 };
@@ -41,11 +42,17 @@ cpu_exec(
 	reg_t stack_ptr,
 	reg_t prog_cntr)
 {
-
-	cpu->reg[SP_NUM] = stack_ptr;
+	const static uint64_t stack_protector[4] = {0xfedcba9876543210,0x0123456789abcdef,0xdeafbeefabcdcafe, 0xaabbccddeeff1122};
+	assert(sizeof(stack_protector) == 32);
+	cpu->reg[SP_NUM] = stack_ptr-sizeof(stack_protector);
+	void *pa = mmu_get_page(cpu->mmu, cpu->reg[SP_NUM], 0);
+	pa += PGOFF(cpu->reg[SP_NUM]);
+	mm_store(cpu->mmu, pa, stack_protector);
 	cpu->reg[PC_NUM] = prog_cntr;
+
 	if (setjmp(cpu_exec_buf)){
 		int i;
+		cache_invalidate(cpu->cache);
 		for (i = 0; i < 16; i++) printf("r%02d:     ", i);
 		printf("\n");
 		for (i = 0; i < 16; i++) printf("%08x ", REG(i));
@@ -54,12 +61,28 @@ cpu_exec(
 		printf("\n");
 		for (i = 16; i < 31; i++) printf("%08x ", REG(i));
 		printf("%08x \n", MMWB.pc);
-
-		printf("cycles:%d\nforwards:%d\nuse-after-load:%d\nbranch-stall1:%d\nbranch-stall12:%d\nsystem-calls:%d\n\n",
-			exec_cpu->stats.ncycle, exec_cpu->stats.nforward, exec_cpu->stats.nload_use, exec_cpu->stats.nctrl1,
-			exec_cpu->stats.nctrl2, exec_cpu->stats.nsyscall);
-		for (i = 0; i < NINST_TYPE; i++)
-			printf("%s:%d\n", inst_desc[i], exec_cpu->stats.ninst[i]);
+		cpu->stats.ncycle += cpu->stats.nicache_stall + cpu->stats.ndcache_stall;
+		printf("cycles:%d\nforwards:%d(%.2f%% per-cycle)\nuse-after-load:%d(%.2f%% per-cycle)\n",
+			cpu->stats.ncycle, cpu->stats.nforward, 100.0*cpu->stats.nforward/cpu->stats.ncycle,
+			cpu->stats.nload_use, 100.0*cpu->stats.nload_use/cpu->stats.ncycle);
+		printf("branch-stall1:%d\nbranch-stall2:%d\nbranch-stall-per-cycle:%.2f%%\nsystem-calls(3-stalls):%d\n\n",
+			cpu->stats.nctrl1, cpu->stats.nctrl2, 100.0*(cpu->stats.nctrl1+2*cpu->stats.nctrl2)/cpu->stats.ncycle,cpu->stats.nsyscall);
+		int total_inst = 0;
+		for (i = 1; i < NINST_TYPE; i++) total_inst += cpu->stats.ninst[i];
+		printf("total-inst:%d (clocks-per-inst:%.3f)\n", total_inst, 1.0*cpu->stats.ncycle/total_inst);
+		for (i = 1; i < NINST_TYPE; i++)
+			printf("%s:%d(%.2f%%)\n", inst_desc[i], cpu->stats.ninst[i], 100.0*cpu->stats.ninst[i]/total_inst);
+		printf("\nicache-stalls:%d\ndcache-stalls:%d\n", cpu->stats.nicache_stall, cpu->stats.ndcache_stall);
+		uint32_t icache_total =  cpu->cache->stats.i_hit + cpu->cache->stats.i_miss;
+		uint32_t dcache_total =  cpu->cache->stats.d_hit + cpu->cache->stats.d_miss;
+		printf("icache-hit:%d (%.2f%% hit-rate)\nicache-miss:%d\ndcache-hit:%d (%.2f%% hit-rate)\ndcache-miss:%d\n", 
+			cpu->cache->stats.i_hit, 100.0*cpu->cache->stats.i_hit/icache_total, cpu->cache->stats.i_miss, 
+			cpu->cache->stats.d_hit,  100.0*cpu->cache->stats.d_hit/dcache_total, cpu->cache->stats.d_miss);
+		printf("\npages:%d\nitlb-hit:%d\nitlb-miss:%d\ndtlb-hit:%d\ndtlb-miss:%d\n", cpu->mmu->stats.npages,
+			cpu->mmu->stats.nitlb_hit, cpu->mmu->stats.nitlb_miss, cpu->mmu->stats.ndtlb_hit, cpu->mmu->stats.ndtlb_miss);
+		printf("mem-loads:%d\nmem-stores:%d\n", cpu->mmu->stats.nload, cpu->mmu->stats.nstore);
+		printf("mem-access-per-load/store-inst:%.4f\n", (float)(cpu->mmu->stats.nload + cpu->mmu->stats.nstore)/
+			(cpu->stats.ninst[LDST_REG] + cpu->stats.ninst[LDST_IMM] + cpu->stats.ninst[LDST_HALFSIGN]));
 		// caused by non-local jump from error_process
 		return cpu->exec_finished? EXEC_FINISH: EXEC_ABORT;
 	}
@@ -139,6 +162,7 @@ cpu_pipe_if(){
 	*(uint32_t *)(&(IFID.inst)) = cache_load(exec_cpu->cache, REG(PC_NUM), MEM_INST, &latency);
 	IFID.pc = REG(PC_NUM);
 	IFID.nop = 0;
+	IFID.wait = latency;
 	if (latency < 0) exec_cpu->fault = 1;
 	REG(PC_NUM) += 4;
 }
@@ -152,6 +176,7 @@ cpu_pipe_id(){
 	general_inst inst = IFID.inst;
 	IDEX.to_mm.to_wb.inst = inst;
 	IDEX.to_mm.to_wb.pc = IFID.pc;
+	IDEX.to_mm.to_wb.istall = IFID.wait - 1;
 	switch ((inst_ident)inst.id){
 		case REG_ALU:
 			if ((inst.func & FUNC_NOT_ALU) == 0){
@@ -322,7 +347,6 @@ cpu_pipe_id(){
 				IDEX.to_mm.to_wb.rd1 = LR_NUM;
 				IDEX.to_mm.to_wb.do_write = 1;
 			}
-			exec_cpu->stats.nctrl2 ++;
 			IDEX.to_mm.to_wb.type = BRANCH;
 			// latency = exec_cond_branch(i_ptr->cond, i_ptr->offset, i_ptr->link);
 			break;
@@ -330,11 +354,13 @@ cpu_pipe_id(){
 		case SOFT_TRAP:
 		{
 			soft_trap_inst *i_ptr = (soft_trap_inst*)(&inst);
-			if (i_ptr->opcode != 0xff) error_log(INST_INVAL, *(uint32_t *)(&inst));
-			else REG(0) = perform_syscall((syscall_num)i_ptr->trapno, exec_cpu);
-			exec_cpu->fault = 2;
-			exec_cpu->in_syscall = 1;
 			IDEX.to_mm.to_wb.type = JEPRIV;
+			if (i_ptr->opcode != 0xff) error_log(INST_INVAL, *(uint32_t *)(&inst));
+			else{
+				REG(0) = perform_syscall((syscall_num)i_ptr->trapno, exec_cpu);
+				exec_cpu->in_syscall = 1;
+			}
+			exec_cpu->fault = 2;
 			break;
 		}
 		default:
@@ -396,6 +422,7 @@ cpu_pipe_ex(){
 			IFID.nop = 1; // this actually went a bit back in time
 			exec_cpu->use_new_pc = 1;
 			exec_cpu->new_pc = res;
+			exec_cpu->stats.nctrl2 ++;
 		}else EXMM.to_wb.do_write = 0;
 		return;
 	}
@@ -441,11 +468,14 @@ cpu_pipe_mm(){
 		cache_dstore(exec_cpu->cache, EXMM.addr, EXMM.st_val, EXMM.size, &latency);
 	}
 	if (latency < 0) exec_cpu->fault = 4;
+	else MMWB.dstall = latency - 1;
 }
 
 void
 cpu_pipe_wb(){
 	exec_cpu->stats.ninst[MMWB.type] ++;
+	exec_cpu->stats.nicache_stall += MMWB.istall;
+	exec_cpu->stats.ndcache_stall += MMWB.dstall;
 	if (exec_cpu->fault == 5){
 		if (exec_cpu->exec_finished) longjmp(cpu_exec_buf, 100);
 		if (exec_cpu->in_syscall){

@@ -45,6 +45,8 @@ typedef struct {
 	general_inst inst;
 	inst_type type;
 	uint32_t pc;
+	uint32_t istall;
+	uint32_t dstall;
 	flags_reg flags;
 	// load/alu register (and address writeback)
 	reg_num rd1, rd2;
@@ -82,6 +84,7 @@ typedef struct {
 	general_inst inst;
 	uint32_t nop;
 	uint32_t pc;
+	uint32_t wait;
 	// pipe_idex_t idex;
 } pipe_ifid_t;
 
@@ -91,7 +94,8 @@ typedef struct {
 	uint32_t	nload_use;
 	uint32_t	nctrl1;
 	uint32_t	nctrl2;
-	// uint32_t	ninst;
+	uint32_t	nicache_stall;
+	uint32_t	ndcache_stall;
 	uint32_t 	nsyscall;
 	uint32_t	ninst[NINST_TYPE];
 } cpu_stats;

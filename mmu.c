@@ -168,6 +168,7 @@ mm_store(
 	void *pa,
 	const void *data)
 {
+	mmu->stats.nstore ++;
 	memcpy(pa, data, CACHE_LINE_SIZE);
 	return mmu->latency.mem_write;
 }
@@ -178,6 +179,7 @@ mm_load(
 	void *pa,
 	void *data)
 {
+	mmu->stats.nload ++;
 	memcpy(data, pa, CACHE_LINE_SIZE);
 	return mmu->latency.mem_read;
 }

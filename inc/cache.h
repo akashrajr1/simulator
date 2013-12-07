@@ -76,6 +76,7 @@ struct _cache {
 
 
 cache_t *cache_init(mmu_t *mmu, cache_latency *latency_ptr, cache_evict eviction);
+void cache_invalidate(cache_t *cache);
 void cache_destroy(cache_t *cache);
 /*
  * LOAD functions will return the loaded memory (zero extend if not word-long), 

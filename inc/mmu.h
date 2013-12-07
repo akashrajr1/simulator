@@ -65,6 +65,8 @@ typedef struct{
 	uint32_t nitlb_hit;
 	uint32_t ndtlb_miss;
 	uint32_t ndtlb_hit;
+	uint32_t nload;
+	uint32_t nstore;
 } mmu_stats;
 
 typedef void* pte_t;

@@ -31,6 +31,22 @@ cache_t *cache_init(
 }
 
 void
+cache_invalidate(
+	cache_t *cache)
+{
+	memset(cache->icache, 0, sizeof(cache->icache));
+	int i, j;
+	cache_set_t *set;
+	for (i = 0; i < NCACHE_SET; i++){
+		set = cache->dcache + i;
+		for (j = 0; j < CACHE_SET_ASSOC; j++)
+			if (set->valid[j] && set->dirty[j])
+				mm_store(cache->mmu, set->pa[j] + (i<<5), set->data + j);
+	}
+	memset(cache->dcache, 0, sizeof(cache->dcache));
+}
+
+void
 cache_destroy(
 	cache_t *cache)
 {
